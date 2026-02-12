@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0; url=./index.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MEDLUXBD - Redirecionando...</title>
+  </head>
+  <body>
+    <script>
+      const base = '/MEDLUXBD/';
+      const hash = window.location.pathname.replace(base, '').replace(/\/$/, '');
+      const target = `${base}index.html#/${hash || 'dashboard'}${window.location.search || ''}`;
+      window.location.replace(target);
+    </script>
+  </body>
+</html>

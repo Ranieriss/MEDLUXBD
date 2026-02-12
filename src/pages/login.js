@@ -1,8 +1,14 @@
-import { assertSupabaseConfig, supabase } from '../supabaseClient.js';
+import {
+  assertSupabaseConfig,
+  getEmailAuthDisabledGuidance,
+  isEmailAuthDisabledError,
+  logSupabaseAuthError,
+  supabase
+} from '../supabaseClient.js';
 import { mapSupabaseKeyErrorMessage } from '../config.js';
 import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
-import { toast } from '../ui.js';
+import { openModal, toast } from '../ui.js';
 
 export async function renderLogin(view) {
   view.innerHTML = `
@@ -23,6 +29,16 @@ export async function renderLogin(view) {
     </div>`;
 
   const setErr = (e) => {
+    if (isEmailAuthDisabledError(e)) {
+      const guidance = getEmailAuthDisabledGuidance();
+      const modalContent = document.createElement('div');
+      modalContent.innerHTML = `<p><strong>Login por email está desabilitado no Supabase.</strong></p><p>${guidance}</p>`;
+      openModal('Configuração de autenticação necessária', modalContent);
+      view.querySelector('#auth-error').textContent = guidance;
+      toast(guidance, 'error');
+      return;
+    }
+
     const friendlyConfigMessage = mapSupabaseKeyErrorMessage(e);
     const msg = friendlyConfigMessage || `${e?.message || e}`;
     view.querySelector('#auth-error').textContent = msg;
@@ -43,13 +59,15 @@ export async function renderLogin(view) {
       if (!email || !password) return setErr('Email e senha obrigatórios');
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
+        logSupabaseAuthError(error, 'auth.login');
         addDiagnosticError(error, 'auth.login');
-        return setErr(error.message);
+        return setErr(error);
       }
       setState({ session: data.session, user: data.user });
       addEvent({ type: 'login', message: `Login realizado: ${email}` });
       navigate('/dashboard');
     } catch (err) {
+      logSupabaseAuthError(err, 'auth.login');
       addDiagnosticError(err, 'auth.login');
       setErr(err.message || err);
     }
@@ -63,13 +81,15 @@ export async function renderLogin(view) {
       if (!email || !password) return setErr('Email e senha obrigatórios');
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) {
+        logSupabaseAuthError(error, 'auth.signup');
         addDiagnosticError(error, 'auth.signup');
-        return setErr(error.message);
+        return setErr(error);
       }
       toast('Conta criada. Verifique confirmação por email se habilitada.');
       addEvent({ type: 'signup', message: `Conta criada: ${email}` });
       if (data.session) navigate('/dashboard');
     } catch (err) {
+      logSupabaseAuthError(err, 'auth.signup');
       addDiagnosticError(err, 'auth.signup');
       setErr(err.message || err);
     }

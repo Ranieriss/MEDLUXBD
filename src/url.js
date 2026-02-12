@@ -1,4 +1,14 @@
+export function getBasePath() {
+  const path = window.location.pathname || '/';
+  const normalizedPath = path.endsWith('/') ? path : `${path}/`;
+
+  if (normalizedPath.includes('/MEDLUXBD/')) {
+    return '/MEDLUXBD/';
+  }
+
+  return '/';
+}
+
 export function getAppBaseUrl() {
-  const base = `${window.location.origin}${window.location.pathname.replace(/index\.html$/, '')}`;
-  return base.endsWith('/') ? base : `${base}/`;
+  return `${window.location.origin}${getBasePath()}`;
 }

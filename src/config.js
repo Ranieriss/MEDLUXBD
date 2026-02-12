@@ -33,41 +33,33 @@ function isValidSupabaseUrl(value) {
 
 function isValidSupabaseKey(value) {
   const normalized = normalizeValue(value);
-  if (!normalized) return false;
-
-  // Formato atual recomendado.
-  if (normalized.startsWith('sb_publishable_')) return true;
-
-  // Compatibilidade com chave legada "anon" (JWT com 3 partes).
-  if (normalized.split('.').length === 3) return true;
-
-  return false;
-}
-
-function isLikelyTruncatedPublishableKey(value) {
-  const normalized = normalizeValue(value);
-  return normalized.startsWith('sb_publishable_') && normalized.endsWith('-');
+  return normalized.startsWith('sb_publishable_');
 }
 
 export function validateSupabaseConfig() {
-  const issues = [];
+  const missing = [];
 
-  if (isUnset(SUPABASE_URL) || !isValidSupabaseUrl(SUPABASE_URL)) {
-    issues.push('SUPABASE_URL');
+  if (isUnset(SUPABASE_URL)) {
+    missing.push('SUPABASE_URL');
+  } else if (!isValidSupabaseUrl(SUPABASE_URL)) {
+    return 'SUPABASE_URL inválida. Use uma URL https:// do seu projeto Supabase em src/config.js.';
   }
 
   if (isUnset(SUPABASE_PUBLISHABLE_KEY) || !isValidSupabaseKey(SUPABASE_PUBLISHABLE_KEY)) {
-    issues.push('SUPABASE_PUBLISHABLE_KEY');
+    missing.push('SUPABASE_PUBLISHABLE_KEY');
   }
 
-  if (!issues.length) return null;
+  if (!missing.length) return null;
 
-  const baseMessage = `Configuração do Supabase inválida: ${issues.join(', ')}.`;
-  if (issues.includes('SUPABASE_PUBLISHABLE_KEY') || isLikelyTruncatedPublishableKey(SUPABASE_PUBLISHABLE_KEY)) {
-    return `${baseMessage} ${SUPABASE_KEY_SETUP_HINT}`;
+  if (missing.length === 1 && missing[0] === 'SUPABASE_URL') {
+    return 'Falta configurar SUPABASE_URL em src/config.js.';
   }
 
-  return `${baseMessage} Verifique o src/config.js.`;
+  if (missing.length === 1 && missing[0] === 'SUPABASE_PUBLISHABLE_KEY') {
+    return `Falta configurar SUPABASE_PUBLISHABLE_KEY em src/config.js. ${SUPABASE_KEY_SETUP_HINT}`;
+  }
+
+  return `Falta configurar SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY em src/config.js. ${SUPABASE_KEY_SETUP_HINT}`;
 }
 
 export function mapSupabaseKeyErrorMessage(error) {
@@ -76,6 +68,10 @@ export function mapSupabaseKeyErrorMessage(error) {
 
   if (message.includes('invalid api key') || message.includes('invalid authentication credentials')) {
     return SUPABASE_KEY_SETUP_HINT;
+  }
+
+  if (message.includes('sb_secret')) {
+    return 'Chave inválida no frontend. Use apenas SUPABASE_PUBLISHABLE_KEY (sb_publishable_...) em src/config.js.';
   }
 
   return null;

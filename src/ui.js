@@ -1,4 +1,16 @@
+const TOAST_DEDUPE_WINDOW_MS = 2000;
+let lastToastMessage = '';
+let lastToastAt = 0;
+
 export function toast(message, type = 'info') {
+  const now = Date.now();
+  if (message === lastToastMessage && now - lastToastAt < TOAST_DEDUPE_WINDOW_MS) {
+    return;
+  }
+
+  lastToastMessage = message;
+  lastToastAt = now;
+
   const container = document.getElementById('toast-container');
   const div = document.createElement('div');
   div.className = `toast ${type === 'error' ? 'error' : ''}`;

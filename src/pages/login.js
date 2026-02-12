@@ -18,6 +18,22 @@ function getRedirectToUpdatePassword() {
   return `${window.location.origin}${getBasePath()}#/update-password`;
 }
 
+async function tryAutoLoginAfterSignupConflict(email, password, setInfo) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (isInvalidCredentialsError(error)) {
+      setInfo('Este e-mail já está cadastrado. Se não lembrar a senha, use “Esqueci minha senha”.');
+      return;
+    }
+    throw error;
+  }
+
+  setState({ session: data.session, user: data.user });
+  addEvent({ type: 'login', message: `Login automático após cadastro: ${email}` });
+  toast('Conta já existia; login realizado com sucesso.');
+  navigate('/dashboard');
+}
+
 function parseLoginParams() {
   const url = new URL(window.location.href);
   const hash = (window.location.hash || '').replace(/^#/, '');
@@ -158,7 +174,8 @@ export async function renderLogin(view) {
         addDiagnosticError(error, 'auth.signup');
 
         if (isUserAlreadyRegisteredError(error)) {
-          return setInfo('Este e-mail já está cadastrado. Use Entrar ou Esqueci minha senha.');
+          await tryAutoLoginAfterSignupConflict(email, password, setInfo);
+          return;
         }
 
         return setErr(error);
@@ -181,7 +198,7 @@ export async function renderLogin(view) {
       if (!email) return setErr('Informe seu e-mail para recuperar senha.');
       if (!isValidEmail(email)) return setErr('Informe um e-mail válido para recuperar senha.');
 
-      const redirectTo = getRedirectToUpdatePassword();
+      const redirectTo = `${getRedirectToUpdatePassword()}?email=${encodeURIComponent(email)}`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) {
         logSupabaseAuthError(error, 'auth.resetPassword');

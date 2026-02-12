@@ -10,6 +10,7 @@ import { renderObras } from './pages/obras.js';
 import { renderVinculos } from './pages/vinculos.js';
 import { renderMedicoes } from './pages/medicoes.js';
 import { renderAuditoria } from './pages/auditoria.js';
+import { renderUpdatePassword } from './pages/updatePassword.js';
 
 const links = [
   ['/dashboard', 'Dashboard'],
@@ -56,10 +57,12 @@ registerRoute('/obras', renderObras);
 registerRoute('/vinculos', renderVinculos);
 registerRoute('/medicoes', renderMedicoes);
 registerRoute('/auditoria', renderAuditoria);
+registerRoute('/update-password', renderUpdatePassword);
 
 setGuard(async (hash) => {
   const isLogin = hash === '/login';
-  if (!state.session && !isLogin) return '/login';
+  const isRecovery = hash === '/update-password';
+  if (!state.session && !isLogin && !isRecovery) return '/login';
   if (state.session && isLogin) return '/dashboard';
   return null;
 });

@@ -12,7 +12,8 @@ export function navigate(path) {
 }
 
 export async function handleRoute() {
-  const hash = window.location.hash.replace('#', '') || '/dashboard';
+  const rawHash = window.location.hash.replace('#', '') || '/dashboard';
+  const hash = rawHash.split('?')[0];
   if (beforeEach) {
     const redirect = await beforeEach(hash, state);
     if (redirect && redirect !== hash) return navigate(redirect);

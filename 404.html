@@ -8,12 +8,15 @@
   <body>
     <script>
       (function () {
-        const segments = window.location.pathname.split('/').filter(Boolean);
-        const repo = segments.length ? segments[0] : '';
-        const base = repo ? `/${repo}/` : '/';
-        const routePath = segments.slice(1).join('/');
-        const route = routePath ? `/${routePath}` : '/dashboard';
-        const target = `${base}index.html#${route}${window.location.search || ''}`;
+        var path = window.location.pathname || '/';
+        var parts = path.split('/').filter(Boolean);
+        var repo = parts.length ? parts[0] : '';
+        var base = repo ? '/' + repo + '/' : '/';
+        var appRoute = parts.slice(1).join('/');
+        var route = appRoute ? '/' + appRoute : '/dashboard';
+        var query = window.location.search || '';
+        var hash = window.location.hash || '';
+        var target = base + 'index.html#' + route + query + hash;
         window.location.replace(target);
       })();
     </script>

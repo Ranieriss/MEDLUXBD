@@ -23,7 +23,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 
 const EMAIL_AUTH_DISABLED_TEXT = 'Email logins are disabled';
 const EMAIL_AUTH_DISABLED_GUIDANCE =
-  'Ative o provedor Email em Supabase > Authentication > Sign In / Providers > Email. Habilite Email+Password.';
+  'Ative Email Provider no Supabase: Authentication → Sign In / Providers → Email.';
 
 export function isEmailAuthDisabledError(error) {
   const message = String(error?.message || error || '');
@@ -34,6 +34,18 @@ export function isEmailAuthDisabledError(error) {
 
 export function getEmailAuthDisabledGuidance() {
   return EMAIL_AUTH_DISABLED_GUIDANCE;
+}
+
+export function getSupabaseErrorMessage(error) {
+  const message = error?.message || String(error || 'Erro desconhecido');
+  const status = error?.status;
+  const details = status ? `${message} (status: ${status})` : message;
+
+  if (isEmailAuthDisabledError(error)) {
+    return `${details} ${EMAIL_AUTH_DISABLED_GUIDANCE}`;
+  }
+
+  return details;
 }
 
 export function logSupabaseAuthError(error, context = 'auth') {

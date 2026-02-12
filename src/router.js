@@ -1,4 +1,5 @@
-import { state } from './state.js';
+import { addDiagnosticError, state } from './state.js';
+import { toast } from './ui.js';
 
 const routes = new Map();
 let beforeEach = null;
@@ -26,13 +27,26 @@ function resolveHashRoute() {
 
 export async function handleRoute() {
   const hash = resolveHashRoute();
-  if (beforeEach) {
-    const redirect = await beforeEach(hash, state);
-    if (redirect && redirect !== hash) return navigate(redirect);
+  try {
+    if (beforeEach) {
+      const redirect = await beforeEach(hash, state);
+      if (redirect && redirect !== hash) return navigate(redirect);
+    }
+    const view = document.getElementById('view');
+    const render = routes.get(hash) || routes.get('/dashboard');
+    if (render) await render(view);
+  } catch (error) {
+    addDiagnosticError(error, `router.handleRoute:${hash}`);
+    toast(`Erro ao abrir a página: ${error?.message || error}`, 'error');
+    const view = document.getElementById('view');
+    if (view) {
+      view.innerHTML = `<div class="panel"><h2>Falha ao carregar página</h2><p class="muted">${error?.message || 'Erro inesperado.'}</p><div class="row"><button id="go-dashboard" class="small">Ir para dashboard</button><button id="go-login" class="small secondary">Ir para login</button></div></div>`;
+      const dashboardButton = view.querySelector('#go-dashboard');
+      const loginButton = view.querySelector('#go-login');
+      if (dashboardButton) dashboardButton.onclick = () => navigate('/dashboard');
+      if (loginButton) loginButton.onclick = () => navigate('/login');
+    }
   }
-  const view = document.getElementById('view');
-  const render = routes.get(hash) || routes.get('/dashboard');
-  if (render) await render(view);
 }
 
 window.addEventListener('hashchange', handleRoute);

@@ -11,85 +11,52 @@ import {
 } from '../supabaseClient.js';
 import { navigate } from '../router.js';
 import { toast } from '../ui.js';
+import {
+  cleanAuthParamsFromUrl,
+  hasRecoveryParams,
+  parseHashParams,
+  parseQueryParams,
+  trySetSessionFromUrl
+} from '../auth/callback.js';
 
-function getCombinedRecoveryParams() {
-  const url = new URL(window.location.href);
-  const hash = window.location.hash || '';
-  const hashParts = hash.split('#');
-  const routeWithQuery = hashParts[0] || '';
-  const hashQuery = routeWithQuery.includes('?') ? routeWithQuery.split('?')[1] : '';
-  const hashFragment = hashParts.length > 1 ? hashParts.slice(1).join('#') : '';
-
-  const combined = new URLSearchParams();
-  const sources = [
-    url.searchParams,
-    new URLSearchParams(hashQuery),
-    new URLSearchParams(hashFragment)
-  ];
-
-  for (const source of sources) {
-    for (const [key, value] of source.entries()) {
-      if (value && !combined.has(key)) combined.set(key, value);
-    }
-  }
-
-  return combined;
+function getEmailPrefillFromUrl() {
+  const query = parseQueryParams();
+  const hash = parseHashParams();
+  return query.get('email') || hash.get('email') || '';
 }
 
-async function establishRecoverySession() {
-  const params = getCombinedRecoveryParams();
-  const code = params.get('code');
-  const recoveryType = params.get('type');
-
-  if (code && recoveryType === 'recovery') {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) throw error;
-    return data?.session || null;
-  }
-
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-
-  if (accessToken && refreshToken) {
-    const { data, error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken
-    });
-    if (error) throw error;
-    return data?.session || null;
-  }
-
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  return data?.session || null;
-}
-
-function clearSensitiveRecoveryUrl() {
-  const cleanUrl = `${window.location.origin}${window.location.pathname}#/update-password`;
-  window.history.replaceState({}, '', cleanUrl);
+function navigateToLogin(email = '') {
+  const emailQuery = email ? `?email=${encodeURIComponent(email)}` : '';
+  navigate(`/login${emailQuery}`);
 }
 
 export async function renderUpdatePassword(view) {
   view.innerHTML = `
     <div class="login-wrap">
-      <div class="panel" style="max-width:440px;width:100%;">
+      <div class="panel" style="max-width:460px;width:100%;">
         <h2>Atualizar senha</h2>
         <p class="muted" id="update-password-message">Validando link de recuperação...</p>
         <div id="auth-error" class="muted"></div>
-        <div class="grid">
-          <input id="new-password" type="password" placeholder="Nova senha" required />
-          <input id="confirm-password" type="password" placeholder="Confirmar senha" required />
-        </div>
-        <div class="row" style="margin-top:.8rem;">
-          <button id="btn-update-password">Salvar nova senha</button>
-          <button id="btn-back-login" class="secondary">Voltar para login</button>
+        <form id="update-password-form" class="grid" style="display:none;">
+          <input id="new-password" type="password" placeholder="Nova senha" minlength="8" required />
+          <input id="confirm-password" type="password" placeholder="Confirmar senha" minlength="8" required />
+          <button id="btn-update-password" type="submit">Salvar nova senha</button>
+        </form>
+        <div class="row" style="margin-top:.8rem;" id="update-password-actions">
+          <button id="btn-back-login" class="secondary" type="button">Voltar para login</button>
+          <button id="btn-request-link" class="secondary" type="button" style="display:none;">Solicitar novo link</button>
         </div>
       </div>
     </div>`;
 
   const messageEl = view.querySelector('#update-password-message');
   const errorEl = view.querySelector('#auth-error');
-  const updateButton = view.querySelector('#btn-update-password');
+  const formEl = view.querySelector('#update-password-form');
+  const backButton = view.querySelector('#btn-back-login');
+  const requestLinkButton = view.querySelector('#btn-request-link');
+  const newPasswordEl = view.querySelector('#new-password');
+  const confirmPasswordEl = view.querySelector('#confirm-password');
+  const emailPrefill = getEmailPrefillFromUrl();
 
   const setErr = (error) => {
     const msg = getSupabaseErrorMessage(error);
@@ -97,35 +64,28 @@ export async function renderUpdatePassword(view) {
     toast(msg, 'error');
   };
 
-  let recoverySession = null;
-  updateButton.disabled = true;
+  const showInvalidLinkState = (friendlyMessage = 'Link inválido/expirado. Solicite novo link.') => {
+    messageEl.textContent = friendlyMessage;
+    formEl.style.display = 'none';
+    requestLinkButton.style.display = 'inline-flex';
+  };
 
-  try {
-    assertSupabaseConfig();
-    recoverySession = await establishRecoverySession();
-    clearSensitiveRecoveryUrl();
-
-    if (!recoverySession) {
-      messageEl.textContent = 'Link inválido/expirado. Solicite novo link.';
-      return;
-    }
-
-    setState({ session: recoverySession, user: recoverySession.user || null });
+  const showReadyState = () => {
+    errorEl.textContent = '';
     messageEl.textContent = 'Link válido. Defina sua nova senha.';
-    updateButton.disabled = false;
-  } catch (error) {
-    logSupabaseAuthError(error, 'auth.recoverySession');
-    addDiagnosticError(error, 'auth.recoverySession');
-    messageEl.textContent = 'Link inválido/expirado. Solicite novo link.';
-    setErr(error);
-  }
+    formEl.style.display = 'grid';
+    requestLinkButton.style.display = 'none';
+  };
 
-  view.querySelector('#btn-back-login').onclick = () => navigate('/login');
+  backButton.addEventListener('click', () => navigateToLogin(emailPrefill));
+  requestLinkButton.addEventListener('click', () => navigateToLogin(emailPrefill));
 
-  updateButton.onclick = async () => {
+  formEl.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
     try {
-      const password = view.querySelector('#new-password').value;
-      const confirmPassword = view.querySelector('#confirm-password').value;
+      const password = newPasswordEl.value;
+      const confirmPassword = confirmPasswordEl.value;
 
       if (!password || !confirmPassword) {
         return setErr('Preencha os campos de senha.');
@@ -142,8 +102,8 @@ export async function renderUpdatePassword(view) {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      clearSensitiveRecoveryUrl();
-      toast('Senha atualizada com sucesso. Faça login com a nova senha.');
+      cleanAuthParamsFromUrl('/update-password');
+      toast('Senha atualizada com sucesso. Faça login novamente.');
       addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
       await supabase.auth.signOut();
       setState({ session: null, user: null, profile: null, role: 'USER' });
@@ -153,5 +113,37 @@ export async function renderUpdatePassword(view) {
       addDiagnosticError(error, 'auth.updatePassword');
       setErr(error);
     }
-  };
+  });
+
+  try {
+    assertSupabaseConfig();
+
+    if (hasRecoveryParams()) {
+      const setFromUrlResult = await trySetSessionFromUrl(supabase);
+      if (!setFromUrlResult.ok && setFromUrlResult.error) {
+        logSupabaseAuthError(setFromUrlResult.error, `auth.${setFromUrlResult.method}`);
+        addDiagnosticError(setFromUrlResult.error, `auth.${setFromUrlResult.method}`);
+        setErr(setFromUrlResult.error);
+      }
+
+      cleanAuthParamsFromUrl('/update-password');
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+
+    const recoverySession = data?.session || null;
+    if (!recoverySession) {
+      showInvalidLinkState();
+      return;
+    }
+
+    setState({ session: recoverySession, user: recoverySession.user || null });
+    showReadyState();
+  } catch (error) {
+    logSupabaseAuthError(error, 'auth.recoverySession');
+    addDiagnosticError(error, 'auth.recoverySession');
+    showInvalidLinkState();
+    setErr(error);
+  }
 }

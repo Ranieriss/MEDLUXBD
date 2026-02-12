@@ -11,12 +11,21 @@ export function navigate(path) {
   else handleRoute();
 }
 
-export async function handleRoute() {
+function resolveHashRoute() {
   const rawHash = window.location.hash.replace('#', '') || '/dashboard';
-  const looksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
-  const hash = looksLikeRecoveryToken
-    ? '/update-password'
-    : rawHash.split('?')[0].split('#')[0];
+  const searchParams = new URLSearchParams(window.location.search);
+  const hashLooksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
+  const hasRecoveryCode = searchParams.has('code');
+
+  if (hashLooksLikeRecoveryToken || hasRecoveryCode) {
+    return '/update-password';
+  }
+
+  return rawHash.split('?')[0].split('#')[0];
+}
+
+export async function handleRoute() {
+  const hash = resolveHashRoute();
   if (beforeEach) {
     const redirect = await beforeEach(hash, state);
     if (redirect && redirect !== hash) return navigate(redirect);

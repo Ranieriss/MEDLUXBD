@@ -10,12 +10,22 @@ import { mapSupabaseKeyErrorMessage } from '../config.js';
 import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { openModal, toast } from '../ui.js';
+import { getBasePath } from '../url.js';
 
 let authActionInFlight = false;
 
 function getRedirectToUpdatePassword() {
-  const base = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
-  return `${base}#/update-password`;
+  return `${window.location.origin}${getBasePath()}#/update-password`;
+}
+
+function parseLoginParams() {
+  const url = new URL(window.location.href);
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  const hashQuery = hash.includes('?') ? hash.split('?').slice(1).join('?') : '';
+  const hashParams = new URLSearchParams(hashQuery);
+  return {
+    email: url.searchParams.get('email') || hashParams.get('email') || ''
+  };
 }
 
 function isInvalidCredentialsError(error) {
@@ -41,6 +51,10 @@ function withAuthActionLock(action) {
   };
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export async function renderLogin(view) {
   view.innerHTML = `
     <div class="login-wrap">
@@ -48,21 +62,28 @@ export async function renderLogin(view) {
         <h2>MEDLUXBD Login</h2>
         <p class="muted">Use email/senha para entrar ou criar conta.</p>
         <div id="auth-error" class="muted"></div>
-        <div class="grid">
+        <form id="login-form" class="grid">
           <input id="email" type="email" placeholder="email" required />
           <input id="senha" type="password" placeholder="senha" required />
-        </div>
+          <button id="btn-login" type="submit">Entrar</button>
+        </form>
         <div class="row" style="margin-top:.8rem;">
-          <button id="btn-login">Entrar</button>
-          <button id="btn-signup" class="secondary">Criar conta</button>
-        </div>
-        <div class="row" style="margin-top:.8rem;">
-          <button id="btn-forgot" class="secondary">Esqueci minha senha</button>
+          <button id="btn-signup" class="secondary" type="button">Criar conta</button>
+          <button id="btn-forgot" class="secondary" type="button">Esqueci minha senha</button>
         </div>
       </div>
     </div>`;
 
   const errorEl = view.querySelector('#auth-error');
+  const formEl = view.querySelector('#login-form');
+  const emailEl = view.querySelector('#email');
+  const passwordEl = view.querySelector('#senha');
+  const { email: emailFromUrl } = parseLoginParams();
+
+  if (emailFromUrl) {
+    emailEl.value = emailFromUrl;
+    emailEl.focus();
+  }
 
   const setErr = (e) => {
     if (isEmailAuthDisabledError(e)) {
@@ -93,11 +114,13 @@ export async function renderLogin(view) {
     setErr(err);
   }
 
-  view.querySelector('#btn-login').onclick = withAuthActionLock(async () => {
+  formEl.addEventListener('submit', withAuthActionLock(async (event) => {
+    event.preventDefault();
+
     try {
       assertSupabaseConfig();
-      const email = view.querySelector('#email').value.trim();
-      const password = view.querySelector('#senha').value;
+      const email = emailEl.value.trim();
+      const password = passwordEl.value;
       if (!email || !password) return setErr('Email e senha obrigatórios');
 
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -120,13 +143,13 @@ export async function renderLogin(view) {
       addDiagnosticError(err, 'auth.login');
       setErr(err.message || err);
     }
-  });
+  }));
 
-  view.querySelector('#btn-signup').onclick = withAuthActionLock(async () => {
+  view.querySelector('#btn-signup').addEventListener('click', withAuthActionLock(async () => {
     try {
       assertSupabaseConfig();
-      const email = view.querySelector('#email').value.trim();
-      const password = view.querySelector('#senha').value;
+      const email = emailEl.value.trim();
+      const password = passwordEl.value;
       if (!email || !password) return setErr('Email e senha obrigatórios');
 
       const { data, error } = await supabase.auth.signUp({ email, password });
@@ -135,7 +158,7 @@ export async function renderLogin(view) {
         addDiagnosticError(error, 'auth.signup');
 
         if (isUserAlreadyRegisteredError(error)) {
-          return setInfo('Usuário já existe. Use Entrar ou Esqueci minha senha.');
+          return setInfo('Este e-mail já está cadastrado. Use Entrar ou Esqueci minha senha.');
         }
 
         return setErr(error);
@@ -149,13 +172,14 @@ export async function renderLogin(view) {
       addDiagnosticError(err, 'auth.signup');
       setErr(err.message || err);
     }
-  });
+  }));
 
-  view.querySelector('#btn-forgot').onclick = withAuthActionLock(async () => {
+  view.querySelector('#btn-forgot').addEventListener('click', withAuthActionLock(async () => {
     try {
       assertSupabaseConfig();
-      const email = view.querySelector('#email').value.trim() || window.prompt('Digite seu email para reset de senha:');
-      if (!email) return setErr('Email é obrigatório para recuperar senha');
+      const email = emailEl.value.trim();
+      if (!email) return setErr('Informe seu e-mail para recuperar senha.');
+      if (!isValidEmail(email)) return setErr('Informe um e-mail válido para recuperar senha.');
 
       const redirectTo = getRedirectToUpdatePassword();
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
@@ -165,11 +189,11 @@ export async function renderLogin(view) {
         return setErr(error);
       }
 
-      setInfo('E-mail enviado. Verifique sua caixa de entrada.');
+      setInfo('Link enviado. Verifique sua caixa de entrada.');
     } catch (err) {
       logSupabaseAuthError(err, 'auth.resetPassword');
       addDiagnosticError(err, 'auth.resetPassword');
       setErr(err.message || err);
     }
-  });
+  }));
 }

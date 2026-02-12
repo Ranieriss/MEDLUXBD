@@ -82,7 +82,7 @@ export async function renderUpdatePassword(view) {
     recoverySession = await establishRecoverySession();
 
     if (!recoverySession) {
-      messageEl.textContent = 'Link inválido/expirado.';
+      messageEl.textContent = 'Link inválido/expirado. Solicite novo link.';
       return;
     }
 
@@ -92,7 +92,7 @@ export async function renderUpdatePassword(view) {
   } catch (error) {
     logSupabaseAuthError(error, 'auth.recoverySession');
     addDiagnosticError(error, 'auth.recoverySession');
-    messageEl.textContent = 'Link inválido/expirado.';
+    messageEl.textContent = 'Link inválido/expirado. Solicite novo link.';
     setErr(error);
   }
 
@@ -107,6 +107,10 @@ export async function renderUpdatePassword(view) {
         return setErr('Preencha os campos de senha.');
       }
 
+      if (password.length < 8) {
+        return setErr('A senha deve ter pelo menos 8 caracteres.');
+      }
+
       if (password !== confirmPassword) {
         return setErr('As senhas não conferem.');
       }
@@ -114,8 +118,10 @@ export async function renderUpdatePassword(view) {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      toast('Senha atualizada com sucesso.');
+      toast('Senha atualizada. Faça login.');
       addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
+      await supabase.auth.signOut();
+      setState({ session: null, user: null, profile: null, role: 'USER' });
       navigate('/login');
     } catch (error) {
       logSupabaseAuthError(error, 'auth.updatePassword');

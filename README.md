@@ -32,6 +32,21 @@ URL esperada:
 
 O arquivo `404.html` redireciona URLs diretas para `index.html` com hash de rota.
 
+### Ativar o GitHub Pages (evitar 404)
+Se o site estiver retornando **404**, normalmente o Pages não está publicado a partir da branch/pasta correta.
+
+No repositório **Ranieriss/MEDLUXBD**, configure exatamente assim:
+1. Abra **Settings > Pages**.
+2. Em **Build and deployment**, selecione **Deploy from a branch**.
+3. Em **Branch**, selecione **main**.
+4. Em **Folder**, selecione **/(root)**.
+5. Salve e aguarde o deploy concluir.
+
+Checklist rápido:
+- `index.html` na raiz do repositório.
+- `404.html` na raiz do repositório (fallback para rotas diretas).
+- Repositório público (ou plano com Pages para privado).
+
 ## Auth Redirect URLs (Supabase)
 No projeto Supabase, configure em **Authentication > URL Configuration**:
 - Site URL: `https://ranieriss.github.io/MEDLUXBD/`

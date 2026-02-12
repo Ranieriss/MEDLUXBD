@@ -2,7 +2,7 @@ export const SUPABASE_URL = 'https://gcmhgyjjinqafbdmuaqy.supabase.co';
 
 // Cole aqui sua chave pública completa (sb_publishable_...).
 // NUNCA use uma chave sb_secret no frontend.
-export const SUPABASE_PUBLISHABLE_KEY = '';
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_JKtypI8V_ussH5TRL0Rqng_tU324Xk-';
 
 const PLACEHOLDER_TOKENS = [
   'YOUR_',

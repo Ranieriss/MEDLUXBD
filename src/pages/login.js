@@ -1,6 +1,7 @@
 import {
   assertSupabaseConfig,
   getEmailAuthDisabledGuidance,
+  getSupabaseErrorMessage,
   isEmailAuthDisabledError,
   logSupabaseAuthError,
   supabase
@@ -9,6 +10,7 @@ import { mapSupabaseKeyErrorMessage } from '../config.js';
 import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { openModal, toast } from '../ui.js';
+import { getAppBaseUrl } from '../url.js';
 
 export async function renderLogin(view) {
   view.innerHTML = `
@@ -25,22 +27,26 @@ export async function renderLogin(view) {
           <button id="btn-login">Entrar</button>
           <button id="btn-signup" class="secondary">Criar conta</button>
         </div>
+        <div class="row" style="margin-top:.8rem;">
+          <button id="btn-forgot" class="secondary">Esqueci minha senha</button>
+        </div>
       </div>
     </div>`;
 
   const setErr = (e) => {
     if (isEmailAuthDisabledError(e)) {
       const guidance = getEmailAuthDisabledGuidance();
+      const detailed = getSupabaseErrorMessage(e);
       const modalContent = document.createElement('div');
-      modalContent.innerHTML = `<p><strong>Login por email está desabilitado no Supabase.</strong></p><p>${guidance}</p>`;
+      modalContent.innerHTML = `<p><strong>Login por email está desabilitado no Supabase.</strong></p><p>${detailed}</p><p>${guidance}</p>`;
       openModal('Configuração de autenticação necessária', modalContent);
-      view.querySelector('#auth-error').textContent = guidance;
-      toast(guidance, 'error');
+      view.querySelector('#auth-error').textContent = detailed;
+      toast(detailed, 'error');
       return;
     }
 
     const friendlyConfigMessage = mapSupabaseKeyErrorMessage(e);
-    const msg = friendlyConfigMessage || `${e?.message || e}`;
+    const msg = friendlyConfigMessage || getSupabaseErrorMessage(e);
     view.querySelector('#auth-error').textContent = msg;
     toast(msg, 'error');
   };
@@ -91,6 +97,26 @@ export async function renderLogin(view) {
     } catch (err) {
       logSupabaseAuthError(err, 'auth.signup');
       addDiagnosticError(err, 'auth.signup');
+      setErr(err.message || err);
+    }
+  };
+
+  view.querySelector('#btn-forgot').onclick = async () => {
+    try {
+      assertSupabaseConfig();
+      const email = view.querySelector('#email').value.trim() || window.prompt('Digite seu email para reset de senha:');
+      if (!email) return setErr('Email é obrigatório para recuperar senha');
+      const redirectTo = `${getAppBaseUrl()}#/update-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) {
+        logSupabaseAuthError(error, 'auth.resetPassword');
+        addDiagnosticError(error, 'auth.resetPassword');
+        return setErr(error);
+      }
+      toast(`Link de recuperação enviado para ${email}.`);
+    } catch (err) {
+      logSupabaseAuthError(err, 'auth.resetPassword');
+      addDiagnosticError(err, 'auth.resetPassword');
       setErr(err.message || err);
     }
   };

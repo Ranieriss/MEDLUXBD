@@ -1,7 +1,9 @@
 export const SUPABASE_URL = 'https://gcmhgyjjinqafbdmuaqy.supabase.co';
 
 // Cole aqui sua chave pública completa (sb_publishable_...).
-// NUNCA use uma chave sb_secret ou service_role no frontend.
+// NUNCA use chaves secret (sb_secret) ou service_role no frontend.
+// Utilize apenas a chave pública (anon ou publishable) no cliente.
+
 export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_JKtypI8V_ussH5TRL0Rqng_tU324Xk-';
 
 // Compatibilidade com nomes antigos.

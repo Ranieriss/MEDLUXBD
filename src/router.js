@@ -13,7 +13,10 @@ export function navigate(path) {
 
 export async function handleRoute() {
   const rawHash = window.location.hash.replace('#', '') || '/dashboard';
-  const hash = rawHash.split('?')[0];
+  const looksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
+  const hash = looksLikeRecoveryToken
+    ? '/update-password'
+    : rawHash.split('?')[0].split('#')[0];
   if (beforeEach) {
     const redirect = await beforeEach(hash, state);
     if (redirect && redirect !== hash) return navigate(redirect);

@@ -12,25 +12,43 @@ import {
 import { navigate } from '../router.js';
 import { toast } from '../ui.js';
 
-function getHashTokenParams() {
+function getCombinedRecoveryParams() {
+  const url = new URL(window.location.href);
   const hash = window.location.hash || '';
-  const tokenPart = hash.includes('?') ? hash.split('?')[1] : '';
-  return new URLSearchParams(tokenPart);
+  const hashParts = hash.split('#');
+  const routeWithQuery = hashParts[0] || '';
+  const hashQuery = routeWithQuery.includes('?') ? routeWithQuery.split('?')[1] : '';
+  const hashFragment = hashParts.length > 1 ? hashParts.slice(1).join('#') : '';
+
+  const combined = new URLSearchParams();
+  const sources = [
+    url.searchParams,
+    new URLSearchParams(hashQuery),
+    new URLSearchParams(hashFragment)
+  ];
+
+  for (const source of sources) {
+    for (const [key, value] of source.entries()) {
+      if (value && !combined.has(key)) combined.set(key, value);
+    }
+  }
+
+  return combined;
 }
 
 async function establishRecoverySession() {
-  const url = new URL(window.location.href);
-  const hashParams = getHashTokenParams();
-  const code = url.searchParams.get('code') || hashParams.get('code');
+  const params = getCombinedRecoveryParams();
+  const code = params.get('code');
+  const recoveryType = params.get('type');
 
-  if (code) {
+  if (code && recoveryType === 'recovery') {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) throw error;
     return data?.session || null;
   }
 
-  const accessToken = hashParams.get('access_token');
-  const refreshToken = hashParams.get('refresh_token');
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
 
   if (accessToken && refreshToken) {
     const { data, error } = await supabase.auth.setSession({
@@ -44,6 +62,11 @@ async function establishRecoverySession() {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
   return data?.session || null;
+}
+
+function clearSensitiveRecoveryUrl() {
+  const cleanUrl = `${window.location.origin}${window.location.pathname}#/update-password`;
+  window.history.replaceState({}, '', cleanUrl);
 }
 
 export async function renderUpdatePassword(view) {
@@ -80,6 +103,7 @@ export async function renderUpdatePassword(view) {
   try {
     assertSupabaseConfig();
     recoverySession = await establishRecoverySession();
+    clearSensitiveRecoveryUrl();
 
     if (!recoverySession) {
       messageEl.textContent = 'Link inválido/expirado. Solicite novo link.';
@@ -118,7 +142,8 @@ export async function renderUpdatePassword(view) {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      toast('Senha atualizada. Faça login.');
+      clearSensitiveRecoveryUrl();
+      toast('Senha atualizada com sucesso. Faça login com a nova senha.');
       addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
       await supabase.auth.signOut();
       setState({ session: null, user: null, profile: null, role: 'USER' });

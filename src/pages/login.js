@@ -11,6 +11,8 @@ import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { openModal, toast } from '../ui.js';
 
+let authActionInFlight = false;
+
 function getRedirectToUpdatePassword() {
   const base = window.location.origin + window.location.pathname.replace(/index\.html$/, '');
   return `${base}#/update-password`;
@@ -25,6 +27,18 @@ function isUserAlreadyRegisteredError(error) {
   const status = Number(error?.status);
   const message = String(error?.message || '').toLowerCase();
   return status === 422 || message.includes('user already registered');
+}
+
+function withAuthActionLock(action) {
+  return async (...args) => {
+    if (authActionInFlight) return;
+    authActionInFlight = true;
+    try {
+      await action(...args);
+    } finally {
+      authActionInFlight = false;
+    }
+  };
 }
 
 export async function renderLogin(view) {
@@ -79,7 +93,7 @@ export async function renderLogin(view) {
     setErr(err);
   }
 
-  view.querySelector('#btn-login').onclick = async () => {
+  view.querySelector('#btn-login').onclick = withAuthActionLock(async () => {
     try {
       assertSupabaseConfig();
       const email = view.querySelector('#email').value.trim();
@@ -106,9 +120,9 @@ export async function renderLogin(view) {
       addDiagnosticError(err, 'auth.login');
       setErr(err.message || err);
     }
-  };
+  });
 
-  view.querySelector('#btn-signup').onclick = async () => {
+  view.querySelector('#btn-signup').onclick = withAuthActionLock(async () => {
     try {
       assertSupabaseConfig();
       const email = view.querySelector('#email').value.trim();
@@ -121,7 +135,7 @@ export async function renderLogin(view) {
         addDiagnosticError(error, 'auth.signup');
 
         if (isUserAlreadyRegisteredError(error)) {
-          return setInfo('Usuário já cadastrado. Use Entrar ou Esqueci minha senha.');
+          return setInfo('Usuário já existe. Use Entrar ou Esqueci minha senha.');
         }
 
         return setErr(error);
@@ -135,9 +149,9 @@ export async function renderLogin(view) {
       addDiagnosticError(err, 'auth.signup');
       setErr(err.message || err);
     }
-  };
+  });
 
-  view.querySelector('#btn-forgot').onclick = async () => {
+  view.querySelector('#btn-forgot').onclick = withAuthActionLock(async () => {
     try {
       assertSupabaseConfig();
       const email = view.querySelector('#email').value.trim() || window.prompt('Digite seu email para reset de senha:');
@@ -151,11 +165,11 @@ export async function renderLogin(view) {
         return setErr(error);
       }
 
-      setInfo('Link enviado para o e-mail.');
+      setInfo('E-mail enviado. Verifique sua caixa de entrada.');
     } catch (err) {
       logSupabaseAuthError(err, 'auth.resetPassword');
       addDiagnosticError(err, 'auth.resetPassword');
       setErr(err.message || err);
     }
-  };
+  });
 }

@@ -1,11 +1,22 @@
-import { supabaseUrl, supabaseAnonKey } from './config.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import {
+  SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_URL,
+  validateSupabaseConfig
+} from './config.js';
 import { addDiagnosticError } from './state.js';
+import { toast } from './ui.js';
 
-if (!window.supabase?.createClient) {
-  throw new Error('SDK Supabase não carregada. Verifique conexão/CDN.');
+const configErrorMessage = validateSupabaseConfig();
+if (configErrorMessage) {
+  toast(configErrorMessage, 'error');
+  console.error(configErrorMessage);
 }
 
-export const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey, {
+const safeUrl = SUPABASE_URL || 'https://invalid.supabase.co';
+const safeKey = SUPABASE_PUBLISHABLE_KEY || 'invalid-publishable-key';
+
+export const supabase = createClient(safeUrl, safeKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -13,7 +24,16 @@ export const supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKe
   }
 });
 
+export function assertSupabaseConfig() {
+  if (configErrorMessage) {
+    const err = new Error(configErrorMessage);
+    addDiagnosticError(err, 'config.supabase');
+    throw err;
+  }
+}
+
 export async function runQuery(promise, context = 'api') {
+  assertSupabaseConfig();
   const { data, error } = await promise;
   if (error) {
     addDiagnosticError(error, context);
@@ -23,6 +43,7 @@ export async function runQuery(promise, context = 'api') {
 }
 
 export async function getSignedFileUrl(path, expiresIn = 120) {
+  assertSupabaseConfig();
   try {
     const { data, error } = await supabase.storage.from('medlux').createSignedUrl(path, expiresIn);
     if (error) throw error;

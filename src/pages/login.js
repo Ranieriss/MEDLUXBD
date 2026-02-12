@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient.js';
+import { assertSupabaseConfig, supabase } from '../supabaseClient.js';
 import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { toast } from '../ui.js';
@@ -27,31 +27,49 @@ export async function renderLogin(view) {
     toast(msg, 'error');
   };
 
+  try {
+    assertSupabaseConfig();
+  } catch (err) {
+    setErr(err);
+  }
+
   view.querySelector('#btn-login').onclick = async () => {
-    const email = view.querySelector('#email').value.trim();
-    const password = view.querySelector('#senha').value;
-    if (!email || !password) return setErr('Email e senha obrigatórios');
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      addDiagnosticError(error, 'auth.login');
-      return setErr(error);
+    try {
+      assertSupabaseConfig();
+      const email = view.querySelector('#email').value.trim();
+      const password = view.querySelector('#senha').value;
+      if (!email || !password) return setErr('Email e senha obrigatórios');
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        addDiagnosticError(error, 'auth.login');
+        return setErr(error.message);
+      }
+      setState({ session: data.session, user: data.user });
+      addEvent({ type: 'login', message: `Login realizado: ${email}` });
+      navigate('/dashboard');
+    } catch (err) {
+      addDiagnosticError(err, 'auth.login');
+      setErr(err.message || err);
     }
-    setState({ session: data.session, user: data.user });
-    addEvent({ type: 'login', message: `Login realizado: ${email}` });
-    navigate('/dashboard');
   };
 
   view.querySelector('#btn-signup').onclick = async () => {
-    const email = view.querySelector('#email').value.trim();
-    const password = view.querySelector('#senha').value;
-    if (!email || !password) return setErr('Email e senha obrigatórios');
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      addDiagnosticError(error, 'auth.signup');
-      return setErr(error);
+    try {
+      assertSupabaseConfig();
+      const email = view.querySelector('#email').value.trim();
+      const password = view.querySelector('#senha').value;
+      if (!email || !password) return setErr('Email e senha obrigatórios');
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        addDiagnosticError(error, 'auth.signup');
+        return setErr(error.message);
+      }
+      toast('Conta criada. Verifique confirmação por email se habilitada.');
+      addEvent({ type: 'signup', message: `Conta criada: ${email}` });
+      if (data.session) navigate('/dashboard');
+    } catch (err) {
+      addDiagnosticError(err, 'auth.signup');
+      setErr(err.message || err);
     }
-    toast('Conta criada. Verifique confirmação por email se habilitada.');
-    addEvent({ type: 'signup', message: `Conta criada: ${email}` });
-    if (data.session) navigate('/dashboard');
   };
 }

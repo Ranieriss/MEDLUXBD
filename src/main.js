@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient.js';
+import { assertSupabaseConfig, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
 import { toast } from './ui.js';
@@ -77,6 +77,7 @@ window.addEventListener('unhandledrejection', (ev) => {
 
 (async function boot() {
   try {
+    assertSupabaseConfig();
     const { data } = await supabase.auth.getSession();
     setState({ session: data.session, user: data.session?.user || null });
     if (data.session?.user) await loadProfile();

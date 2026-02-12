@@ -15,9 +15,10 @@ Aplicação web estática (HTML/CSS/JS puro) com Supabase (Auth + Postgres + Sto
 
 ## Configuração Supabase
 1. Abra `src/config.js`.
-2. Substitua `supabaseAnonKey` pela sua chave publishable (`sb_publishable_...`).
-3. Mantenha a URL já configurada:
+2. Preencha `SUPABASE_PUBLISHABLE_KEY` com sua chave publishable completa (`sb_publishable_...`).
+3. Mantenha/valide `SUPABASE_URL`:
    - `https://gcmhgyjjinqafbdmuaqy.supabase.co`
+4. Se a configuração estiver vazia/placeholder, o app mostra um toast com instruções e bloqueia chamadas da API para evitar erro "Invalid API key".
 
 ## Rodar local
 ```bash
@@ -45,6 +46,7 @@ No repositório **Ranieriss/MEDLUXBD**, configure exatamente assim:
 Checklist rápido:
 - `index.html` na raiz do repositório.
 - `404.html` na raiz do repositório (fallback para rotas diretas).
+- `.nojekyll` na raiz para servir arquivos/pastas sem interferência do Jekyll.
 - Repositório público (ou plano com Pages para privado).
 
 ## Auth Redirect URLs (Supabase)

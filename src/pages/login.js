@@ -1,4 +1,5 @@
 import { assertSupabaseConfig, supabase } from '../supabaseClient.js';
+import { mapSupabaseKeyErrorMessage } from '../config.js';
 import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { toast } from '../ui.js';
@@ -22,7 +23,8 @@ export async function renderLogin(view) {
     </div>`;
 
   const setErr = (e) => {
-    const msg = `${e?.message || e}`;
+    const friendlyConfigMessage = mapSupabaseKeyErrorMessage(e);
+    const msg = friendlyConfigMessage || `${e?.message || e}`;
     view.querySelector('#auth-error').textContent = msg;
     toast(msg, 'error');
   };

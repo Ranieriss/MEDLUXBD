@@ -13,10 +13,7 @@ if (configErrorMessage) {
   console.error(configErrorMessage);
 }
 
-const safeUrl = SUPABASE_URL || 'https://invalid.supabase.co';
-const safeKey = SUPABASE_PUBLISHABLE_KEY || 'invalid-publishable-key';
-
-export const supabase = createClient(safeUrl, safeKey, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

@@ -1,8 +1,9 @@
 import { addDiagnosticError, addEvent } from './state.js';
 import { nowUtcIso } from './shared_datetime.js';
+import { APP_VERSION } from './version.js';
 
 function randomId() {
-  return `${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
+  return crypto.randomUUID();
 }
 
 export const pageCorrelationId = randomId();
@@ -19,12 +20,17 @@ export function createLogger(context) {
   const base = { context, correlationId: pageCorrelationId };
 
   const write = (level, message, meta = {}) => {
+    const route = window.location.hash.replace('#', '') || '/';
     const payload = {
-      ...base,
+      timestamp: nowUtcIso(),
       level,
+      route,
+      action: meta.action || context,
+      entity: meta.entity || null,
       message,
-      at: nowUtcIso(),
-      meta: cleanMeta(meta)
+      details: cleanMeta(meta.details || meta),
+      correlation_id: base.correlationId,
+      app_version: APP_VERSION
     };
     if (level === 'ERROR') {
       addDiagnosticError(new Error(message), context);
@@ -34,7 +40,7 @@ export function createLogger(context) {
     } else {
       console.info('[MEDLUXBD]', payload);
     }
-    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.meta, correlationId: base.correlationId });
+    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.details, correlationId: base.correlationId });
     return payload;
   };
 

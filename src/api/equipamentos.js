@@ -42,14 +42,31 @@ export const deleteEquipamento = (id) => runQuery(
 
 export async function hasEquipamentoDependencies(id) {
   const [medicoes, vinculos] = await Promise.all([
-    runQuery(
-      applyOrganizationFilter(supabase.from('medicoes').select('id').eq('equipamento_id', id).limit(1), 'equipamentos.dep.medicoes'),
-      'equipamentos.dep.medicoes'
-    ),
-    runQuery(
-      applyOrganizationFilter(supabase.from('vinculos').select('id').eq('equipamento_id', id).limit(1), 'equipamentos.dep.vinculos'),
-      'equipamentos.dep.vinculos'
-    )
+runQuery(
+  applyOrganizationFilter(
+    supabase
+      .from('medicoes')
+      .select('id')
+      .eq('equipamento_id', id)
+      .limit(1),
+    'equipamentos.dep.medicoes'
+  ),
+  'equipamentos.dep.medicoes'
+),
+
+runQuery(
+  applyOrganizationFilter(
+    supabase
+      .from('vinculos')
+      .select('id')
+      .eq('equipamento_id', id)
+      .eq('status', 'ATIVO')
+      .limit(1),
+    'equipamentos.dep.vinculosAtivos'
+  ),
+  'equipamentos.dep.vinculosAtivos'
+)
+
   ]);
   return (medicoes?.length || 0) > 0 || (vinculos?.length || 0) > 0;
 }

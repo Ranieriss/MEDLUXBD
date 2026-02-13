@@ -30,3 +30,11 @@ export const deleteObra = (id) => runQuery(
   applyOrganizationFilter(supabase.from('obras').update({ status: 'INATIVA', updated_at: nowUtcIso() }).eq('id', id), 'obras.softDelete'),
   'obras.softDelete'
 );
+
+export async function hasObraDependencies(id) {
+  const [vinculos, medicoes] = await Promise.all([
+    runQuery(supabase.from('vinculos').select('id').eq('obra_id', id).limit(1), 'obras.dep.vinculos'),
+    runQuery(supabase.from('medicoes').select('id').eq('obra_id', id).limit(1), 'obras.dep.medicoes')
+  ]);
+  return (vinculos?.length || 0) > 0 || (medicoes?.length || 0) > 0;
+}

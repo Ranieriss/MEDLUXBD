@@ -44,6 +44,26 @@ export async function listMedicoes(filters = {}, options = {}) {
   }
 }
 
+export async function listMedicoes(filters = {}, options = {}) {
+  let q = supabase
+    .from('medicoes')
+    .select(MEDICAO_SELECT_COLUMNS)
+    .order('medido_em', { ascending: false });
+
+  if (!options?.includeDeleted) {
+    q = q.is('deleted_at', null);
+  }
+
+  if (filters?.equipamento_id) q = q.eq('equipamento_id', filters.equipamento_id);
+  if (filters?.obra_id) q = q.eq('obra_id', filters.obra_id);
+  if (filters?.user_id) q = q.eq('user_id', filters.user_id);
+  if (filters?.tipo) q = q.eq('tipo', filters.tipo);
+  if (filters?.data_from) q = q.gte('medido_em', filters.data_from);
+  if (filters?.data_to) q = q.lte('medido_em', filters.data_to);
+
+  return runQuery(q, 'medicoes.list');
+}
+
   if (filters.obra_id) q = q.eq('obra_id', filters.obra_id);
   if (filters.equipamento_id) q = q.eq('equipamento_id', filters.equipamento_id);
   try {

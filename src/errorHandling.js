@@ -1,4 +1,4 @@
-import { toast } from './ui.js';
+import { toast, openModal, escapeHtml } from './ui.js';
 import { tryAuditLog } from './audit.js';
 import { addDiagnosticError, state } from './state.js';
 
@@ -15,9 +15,29 @@ export function classifyError(error) {
   return { userMessage: error?.message || 'Ocorreu um erro inesperado.', kind: 'GENERIC' };
 }
 
+function showAdminErrorDetails(error, context, classified) {
+  if (state.role !== 'ADMIN') return;
+  const content = document.createElement('div');
+  content.innerHTML = `<p>Ocorreu um erro inesperado na aplicação.</p><details><summary>Detalhes técnicos (ADMIN)</summary><pre>${escapeHtml(
+    JSON.stringify(
+      {
+        context,
+        kind: classified.kind,
+        code: error?.code ?? null,
+        status: error?.status ?? null,
+        message: error?.message || String(error)
+      },
+      null,
+      2
+    )
+  )}</pre></details>`;
+  openModal('Erro da aplicação', content);
+}
+
 export async function handleGlobalError(error, context = 'global') {
   const classified = classifyError(error);
   addDiagnosticError(error, context);
+
   await tryAuditLog({
     action: 'ERROR',
     entity: context,
@@ -30,7 +50,7 @@ export async function handleGlobalError(error, context = 'global') {
     }
   });
 
-  const technical = state.role === 'ADMIN' ? ` (${classified.kind}${error?.code ? `/${error.code}` : ''})` : '';
-  toast(`${classified.userMessage}${technical}`, 'error');
+  toast(classified.userMessage, 'error');
+  showAdminErrorDetails(error, context, classified);
   return classified;
 }

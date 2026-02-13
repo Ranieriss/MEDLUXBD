@@ -16,21 +16,32 @@ function cleanMeta(meta) {
   }
 }
 
+export async function sendAppLog(payload) {
+  try {
+    const { supabase } = await import('./supabaseClient.js');
+    await supabase.from('app_logs').insert(payload);
+  } catch (error) {
+    console.warn('[MEDLUXBD][app_logs] falha ao enviar log', error?.message || error);
+  }
+}
+
 export function createLogger(context) {
   const base = { context, correlationId: pageCorrelationId };
 
   const write = (level, message, meta = {}) => {
     const route = window.location.hash.replace('#', '') || '/';
+    const sanitizedMeta = cleanMeta(meta);
+
     const payload = {
-      context: base.context,
       timestamp: nowUtcIso(),
       level,
       route,
-      action: meta.action || context,
-      entity: meta.entity || null,
+      action: sanitizedMeta.action || context,
+      entity: sanitizedMeta.entity || null,
       message,
-      details: cleanMeta(meta.details || meta),
-      correlation_id: base.correlationId,
+      details: sanitizedMeta.details || null,
+      meta: sanitizedMeta,
+      correlation_id: sanitizedMeta.correlation_id || base.correlationId,
       app_version: APP_VERSION
     };
 
@@ -43,7 +54,8 @@ export function createLogger(context) {
       console.info('[MEDLUXBD]', payload);
     }
 
-    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.details, correlationId: base.correlationId });
+    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.meta, correlation_id: payload.correlation_id });
+    void sendAppLog(payload);
     return payload;
   };
 

@@ -12,8 +12,10 @@ function sanitizeDetails(details = {}) {
 export async function tryAuditLog({ action, entity, entityId = null, severity = 'INFO', details = {} }) {
   const payload = {
     user_id: state.user?.id || null,
+    organization_id: state.profile?.organization_id || state.organization_id || null,
     action: `${action}:${entity}`,
     created_at: nowUtcIso(),
+    user_ref: state.user?.id || null,
     payload: {
       entity,
       entity_id: entityId,

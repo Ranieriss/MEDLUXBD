@@ -2,7 +2,7 @@ import { assertSupabaseConfig, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
 import { toast } from './ui.js';
-import { getMyProfile, upsertProfile } from './api/profiles.js';
+import { ensureProfileShape, getMyProfile, upsertProfile } from './api/profiles.js';
 import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderEquipamentos } from './pages/equipamentos.js';
@@ -50,9 +50,25 @@ async function loadProfile() {
   if (!state.user?.id) return;
   let profile = await getMyProfile(state.user.id);
   if (!profile) {
-    profile = await upsertProfile({ id: state.user.id, role: 'USER', email: state.user.email });
+    profile = await upsertProfile({
+      id: state.user.id,
+      role: 'USER',
+      email: state.user.email,
+      nome: (state.user.email || '').split('@')[0] || 'Usuário'
+    });
   }
-  setState({ profile, role: profile.role || 'USER' });
+
+  const completeProfile = ensureProfileShape(profile, {
+    id: state.user.id,
+    email: state.user.email,
+    role: 'USER'
+  });
+
+  if (!profile?.nome || !profile?.email || !profile?.role) {
+    await upsertProfile(completeProfile);
+  }
+
+  setState({ profile: completeProfile, role: completeProfile.role || 'USER' });
 }
 
 registerRoute('/login', renderLogin);
@@ -63,10 +79,11 @@ registerRoute('/vinculos', renderVinculos);
 registerRoute('/medicoes', renderMedicoes);
 registerRoute('/auditoria', renderAuditoria);
 registerRoute('/update-password', renderUpdatePassword);
+registerRoute('/reset-password', renderUpdatePassword);
 
 setGuard(async (hash) => {
   const isLogin = hash === '/login';
-  const isRecovery = hash === '/update-password';
+  const isRecovery = hash === '/update-password' || hash === '/reset-password';
   if (!state.session && !isLogin && !isRecovery) return '/login';
   if (state.session && isLogin) return '/dashboard';
   return null;
@@ -98,8 +115,8 @@ window.addEventListener('unhandledrejection', (ev) => {
         await loadProfile();
       }
 
-      navigate('/update-password');
-      cleanAuthParamsFromUrl('/update-password');
+      navigate('/reset-password');
+      cleanAuthParamsFromUrl('/reset-password');
     }
 
     if (hasRecoveryParams()) {
@@ -112,8 +129,8 @@ window.addEventListener('unhandledrejection', (ev) => {
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        navigate('/update-password');
-        cleanAuthParamsFromUrl('/update-password');
+        navigate('/reset-password');
+        cleanAuthParamsFromUrl('/reset-password');
         return;
       }
 

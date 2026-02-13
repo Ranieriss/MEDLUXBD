@@ -3,6 +3,7 @@ import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { state } from '../state.js';
 import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { toFriendlyErrorMessage } from '../supabaseClient.js';
 
 function formMedicao({ item = {}, equipamentos = [], obras = [] }) {
   const wrap = document.createElement('div');
@@ -50,7 +51,7 @@ export async function renderMedicoes(view) {
     view.querySelector('#novo').onclick = () => openEditor();
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find(i => i.id === b.dataset.edit)));
     view.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = () => printMedicao(items.find(i => i.id === b.dataset.pdf)));
-    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir medição?')) return; await deleteMedicao(b.dataset.del); redraw(); });
+    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir medição?')) return; try { await deleteMedicao(b.dataset.del); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
   };
 
   const openEditor = (item = null) => {
@@ -62,10 +63,14 @@ export async function renderMedicoes(view) {
         return toast('Preencha todos os campos obrigatórios', 'error');
       }
       payload.conforme = payload.conforme === 'true';
-      if (item) await updateMedicao(item.id, payload); else await createMedicao(payload);
-      closeModal();
-      redraw();
-      toast('Medição salva');
+      try {
+        if (item) await updateMedicao(item.id, payload); else await createMedicao(payload);
+        closeModal();
+        redraw();
+        toast('Medição salva');
+      } catch (error) {
+        toast(toFriendlyErrorMessage(error), 'error');
+      }
     };
   };
 

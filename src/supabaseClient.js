@@ -25,6 +25,25 @@ const EMAIL_AUTH_DISABLED_TEXT = 'Email logins are disabled';
 const EMAIL_AUTH_DISABLED_GUIDANCE =
   'Ative Email Provider no Supabase: Authentication → Sign In / Providers → Email.';
 
+const DATABASE_ERROR_MESSAGES = {
+  '23502': 'Campo obrigatório não preenchido',
+  '42703': 'Coluna não existe'
+};
+
+export function getFriendlyDatabaseError(error) {
+  const code = error?.code ? String(error.code) : '';
+  if (DATABASE_ERROR_MESSAGES[code]) return DATABASE_ERROR_MESSAGES[code];
+  return null;
+}
+
+export function toFriendlyErrorMessage(error, fallback = 'Ocorreu um erro inesperado.') {
+  const dbMessage = getFriendlyDatabaseError(error);
+  if (dbMessage) return dbMessage;
+  if (typeof error === 'string') return error;
+  if (error?.message) return error.message;
+  return fallback;
+}
+
 export function isEmailAuthDisabledError(error) {
   const message = String(error?.message || error || '');
   const status = Number(error?.status);
@@ -37,6 +56,9 @@ export function getEmailAuthDisabledGuidance() {
 }
 
 export function getSupabaseErrorMessage(error) {
+  const friendly = getFriendlyDatabaseError(error);
+  if (friendly) return friendly;
+
   const message = error?.message || String(error || 'Erro desconhecido');
   const status = error?.status;
   const details = status ? `${message} (status: ${status})` : message;
@@ -52,6 +74,7 @@ export function logSupabaseAuthError(error, context = 'auth') {
   console.error(`[${context}] Supabase auth error`, {
     error,
     status: error?.status ?? null,
+    code: error?.code ?? null,
     message: error?.message ?? String(error)
   });
 }
@@ -66,12 +89,14 @@ export function assertSupabaseConfig() {
 
 export async function runQuery(promise, context = 'api') {
   assertSupabaseConfig();
-  const { data, error } = await promise;
-  if (error) {
+  try {
+    const { data, error } = await promise;
+    if (error) throw error;
+    return data;
+  } catch (error) {
     addDiagnosticError(error, context);
     throw error;
   }
-  return data;
 }
 
 export async function getSignedFileUrl(path, expiresIn = 120) {

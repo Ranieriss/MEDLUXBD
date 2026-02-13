@@ -118,7 +118,7 @@ export async function trySetSessionFromUrl(supabase) {
   }
 }
 
-export function cleanAuthParamsFromUrl(targetHashRoute = '/update-password') {
+export function cleanAuthParamsFromUrl(targetHashRoute = '/reset-password') {
   const url = new URL(window.location.href);
   for (const key of SENSITIVE_AUTH_KEYS) {
     url.searchParams.delete(key);

@@ -1,4 +1,5 @@
 import { addDiagnosticError, state } from './state.js';
+import { toFriendlyErrorMessage } from './supabaseClient.js';
 import { toast } from './ui.js';
 
 const routes = new Map();
@@ -13,6 +14,30 @@ export function navigate(path) {
   else handleRoute();
 }
 
+export function renderError(message = 'Erro inesperado.') {
+  const view = document.getElementById('view');
+  if (!view) return;
+
+  view.innerHTML = `<div class="panel"><h2>Falha ao carregar página</h2><p class="muted">${message}</p><div class="row"><button id="go-dashboard" class="small">Ir para dashboard</button><button id="go-login" class="small secondary">Ir para login</button></div></div>`;
+  const dashboardButton = view.querySelector('#go-dashboard');
+  const loginButton = view.querySelector('#go-login');
+  if (dashboardButton) dashboardButton.onclick = () => navigate('/dashboard');
+  if (loginButton) loginButton.onclick = () => navigate('/login');
+}
+
+export async function safeLoad(fn, context = 'router.safeLoad') {
+  try {
+    await fn();
+    return true;
+  } catch (e) {
+    addDiagnosticError(e, context);
+    const message = toFriendlyErrorMessage(e, 'Não foi possível carregar os dados desta página.');
+    toast(message, 'error');
+    renderError(message);
+    return false;
+  }
+}
+
 function resolveHashRoute() {
   const rawHash = window.location.hash.replace('#', '') || '/dashboard';
   const searchParams = new URLSearchParams(window.location.search);
@@ -20,13 +45,13 @@ function resolveHashRoute() {
   const hashLooksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
   const hasRecoveryCode = searchParams.has('code');
 
-  if (hashRoute === '/update-password' || hashLooksLikeRecoveryToken) {
-    return '/update-password';
+  if (hashRoute === '/update-password' || hashRoute === '/reset-password' || hashLooksLikeRecoveryToken) {
+    return '/reset-password';
   }
 
   if (hasRecoveryCode && !consumedInitialCodeParam) {
     consumedInitialCodeParam = true;
-    return '/update-password';
+    return '/reset-password';
   }
 
   return hashRoute;
@@ -41,18 +66,14 @@ export async function handleRoute() {
     }
     const view = document.getElementById('view');
     const render = routes.get(hash) || routes.get('/dashboard');
-    if (render) await render(view);
+    if (render) {
+      await safeLoad(() => render(view), `router.handleRoute:${hash}`);
+    }
   } catch (error) {
     addDiagnosticError(error, `router.handleRoute:${hash}`);
-    toast(`Erro ao abrir a página: ${error?.message || error}`, 'error');
-    const view = document.getElementById('view');
-    if (view) {
-      view.innerHTML = `<div class="panel"><h2>Falha ao carregar página</h2><p class="muted">${error?.message || 'Erro inesperado.'}</p><div class="row"><button id="go-dashboard" class="small">Ir para dashboard</button><button id="go-login" class="small secondary">Ir para login</button></div></div>`;
-      const dashboardButton = view.querySelector('#go-dashboard');
-      const loginButton = view.querySelector('#go-login');
-      if (dashboardButton) dashboardButton.onclick = () => navigate('/dashboard');
-      if (loginButton) loginButton.onclick = () => navigate('/login');
-    }
+    const message = toFriendlyErrorMessage(error, 'Erro ao abrir a página.');
+    toast(message, 'error');
+    renderError(message);
   }
 }
 

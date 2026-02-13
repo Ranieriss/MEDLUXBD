@@ -1,12 +1,31 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 
+const PROFILE_COLUMNS = 'id,email,nome,role,created_at,updated_at';
+
+export function ensureProfileShape(profile = {}, fallback = {}) {
+  const email = profile.email || fallback.email || '';
+  const nomeBase = email.includes('@') ? email.split('@')[0] : email;
+
+  return {
+    id: profile.id || fallback.id || null,
+    email,
+    nome: profile.nome || nomeBase || 'Usuário',
+    role: profile.role || fallback.role || 'USER'
+  };
+}
+
 export const getMyProfile = async (userId) => {
   const data = await runQuery(
-    supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', userId).maybeSingle(),
     'profiles.getMyProfile'
   );
-  return data;
+  return data ? ensureProfileShape(data, { id: userId }) : null;
 };
 
-export const upsertProfile = async (payload) =>
-  runQuery(supabase.from('profiles').upsert(payload).select().single(), 'profiles.upsert');
+export const upsertProfile = async (payload) => {
+  const complete = ensureProfileShape(payload, payload);
+  return runQuery(
+    supabase.from('profiles').upsert(complete).select(PROFILE_COLUMNS).single(),
+    'profiles.upsert'
+  );
+};

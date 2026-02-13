@@ -122,8 +122,6 @@ window.addEventListener('unhandledrejection', (ev) => {
   handleGlobalError(ev.reason || new Error('Falha não tratada'), 'window.unhandledrejection');
 });
 
-});
-
 (async function boot() {
   try {
     assertSupabaseConfig();

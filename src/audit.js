@@ -11,6 +11,12 @@ function sanitizeDetails(details = {}) {
   return clone;
 }
 
+function normalizeSeverity(action, severity) {
+  const actionUpper = String(action || '').toUpperCase();
+  if (['DELETE', 'SOFT_DELETE', 'ENCERRAR', 'INATIVAR'].includes(actionUpper)) return 'WARN';
+  return severity || 'INFO';
+}
+
 export async function tryAuditLog({
   action,
   entity,
@@ -21,17 +27,16 @@ export async function tryAuditLog({
   after = null,
   route = window.location.hash.replace('#', '') || '/'
 }) {
+  const normalizedSeverity = normalizeSeverity(action, severity);
   const payload = {
     user_id: state.user?.id || null,
-    // Single-tenant: não depende disso (DB pode preencher), mas se existir ajuda para rastreio
     organization_id: state.profile?.organization_id || state.organization_id || null,
     action: `${action}:${entity}`,
     created_at: nowUtcIso(),
-    user_ref: state.user?.id || null,
     payload: {
       entity,
       entity_id: entityId,
-      severity,
+      severity: normalizedSeverity,
       route,
       app_version: APP_VERSION,
       correlation_id: pageCorrelationId,
@@ -50,4 +55,3 @@ export async function tryAuditLog({
     return false;
   }
 }
-

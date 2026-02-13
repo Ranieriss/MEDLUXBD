@@ -1,4 +1,4 @@
-import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, hasActiveVinculoByEquipamento, listVinculos, updateVinculo } from '../api/vinculos.js';
+import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, listVinculos, updateVinculo } from '../api/vinculos.js';
 import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { uploadTermo } from '../api/storage.js';
@@ -67,9 +67,6 @@ export async function renderVinculos(view) {
           await tryAuditLog({ action: 'ERROR', entity: 'vinculos.validation', severity: 'WARN', details: { message: validationError } });
           return toast(validationError, 'error');
         }
-        if (!item && await hasActiveVinculoByEquipamento(payload.equipamento_id)) {
-          return toast('Já existe vínculo ATIVO para este equipamento.', 'error');
-        }
         if (!payload.obra_id) return toast('obra_id é obrigatório para vínculo.', 'error');
         const file = form.querySelector('input[name="termo"]').files[0];
         if (file) {
@@ -99,6 +96,9 @@ export async function renderVinculos(view) {
         toast('Vínculo salvo');
         renderVinculos(view);
       } catch (error) {
+        if (String(error?.code || '') === 'INTEGRITY_ACTIVE_VINCULO_DUPLICATE') {
+          return toast('Já existe vínculo ATIVO para este equipamento. Encerre o vínculo atual para continuar.', 'error');
+        }
         toast(toFriendlyErrorMessage(error), 'error');
       }
     };
@@ -117,7 +117,7 @@ export async function renderVinculos(view) {
     try {
       const motivo = window.prompt('Motivo do encerramento (opcional):') || '';
       await encerrarVinculo(b.dataset.end, motivo);
-      await tryAuditLog({ action: 'ENCERRAR', entity: 'vinculos', entityId: b.dataset.end, details: { motivo }, before: items.find((i) => i.id === b.dataset.end) || null, after: { status: 'ENCERRADO', motivo_encerramento: motivo } });
+      await tryAuditLog({ action: 'ENCERRAR', entity: 'vinculos', severity: 'WARN', entityId: b.dataset.end, details: { motivo }, before: items.find((i) => i.id === b.dataset.end) || null, after: { status: 'ENCERRADO', motivo_encerramento: motivo } });
       toast('Vínculo encerrado');
       renderVinculos(view);
     } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
@@ -128,7 +128,7 @@ export async function renderVinculos(view) {
       if (!confirmed) return;
 
       await deleteVinculo(b.dataset.del);
-      await tryAuditLog({ action: 'DELETE', entity: 'vinculos', entityId: b.dataset.del, details: { mode: 'soft_delete' }, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set' } });
+      await tryAuditLog({ action: 'DELETE', entity: 'vinculos', severity: 'WARN', entityId: b.dataset.del, details: { mode: 'soft_delete' }, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set', status: 'ENCERRADO' } });
       renderVinculos(view);
     } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
   });

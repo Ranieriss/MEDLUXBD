@@ -59,36 +59,35 @@ O `404.html` da raiz redireciona deep links para `index.html` com hash de rota p
 
 ## Release v1.0.0 (hardening)
 
-### SQL opcional (não executado automaticamente)
+### O que entra nesta release
+- Soft delete obrigatório em `equipamentos`, `obras`, `vinculos` e `medicoes` (sem `DELETE` físico pelo frontend).
+- Integridade de vínculo ATIVO (1 vínculo ativo por equipamento, considerando `deleted_at is null`).
+- Auditoria e logs padronizados (`audit_log` e `app_logs`) com `correlation_id` e `app_version`.
+- Tratamento global de erro para `window.error` e `unhandledrejection`.
+- Operação single-tenant (ICD Vias), sem obrigatoriedade de `organization_id` no frontend.
+
+### Como rodar SQL de hardening no Supabase
 No Supabase Dashboard:
 1. Clique em **SQL Editor**.
 2. Clique em **New query**.
-3. Cole e execute o script:
+3. Execute nesta ordem:
 
 ```sql
+supabase/migrations/20260212110000_medluxbd_schema_alignment.sql
 supabase/migrations/20260213090000_medluxbd_v1_hardening_optional.sql
 ```
 
-Esse script adiciona `medicoes.deleted_at` para futuras estratégias de soft delete.
-
-### SQL opcional (fundação multi-tenant + soft delete completo)
-Para ambientes com RLS por organização (`public.current_org_id()`), execute também:
-
-```sql
-supabase/migrations/20260213120000_medluxbd_org_softdelete_foundation_optional.sql
-```
-
-Esse script adiciona colunas `organization_id`/`deleted_at` nas entidades principais e cria a função `public.current_org_id()` baseada em `profiles.organization_id`.
+> O banco já possui bloqueio de `DELETE` físico por trigger e suporte a `deleted_at` nas tabelas principais.
 
 ### Verificação rápida de release
 - Versão exibida no app: `v1.0.0`.
 - Página Auditoria deve carregar mesmo com `audit_log` vazio.
-- CRUD com validação e confirmações fortes deve estar ativo.
+- CRUD com validação, soft delete e mensagens amigáveis deve estar ativo.
 
 ### Smoke test rápido (frontend)
 1. `python -m http.server 8000`
 2. Abra `http://localhost:8000/`.
 3. Faça login com usuário ADMIN e valide:
    - toggle "Mostrar removidos" nas páginas de cadastro;
-   - exclusão com confirmação digitando `DELETE`;
+   - encerramento/exclusão lógica de vínculos;
    - eventos/erros no menu Auditoria.

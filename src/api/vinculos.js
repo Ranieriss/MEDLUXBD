@@ -2,22 +2,14 @@ import { supabase, runQuery, getSignedFileUrl } from '../supabaseClient.js';
 import { VINCULO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
 import { state } from '../state.js';
-import { getCurrentOrgId } from './org.js';
 
 const VINCULO_LEGACY_COLUMNS =
   'id,equipamento_id,obra_id,user_id,inicio_em,status,termo_url,termo_nome,motivo_encerramento,encerrou_em,encerrado_por,created_at,updated_at';
 
 function baseVinculosQuery(includeDeleted = false) {
-  let query = supabase
-    .from('vinculos')
-    .select(VINCULO_SELECT_COLUMNS)
-    .order('created_at', { ascending: false });
-
+  let query = supabase.from('vinculos').select(VINCULO_SELECT_COLUMNS).order('created_at', { ascending: false });
   if (!includeDeleted) query = query.is('deleted_at', null);
-
   return query;
-}
-
 }
 
 export async function listVinculos({ includeDeleted = false } = {}) {
@@ -25,19 +17,20 @@ export async function listVinculos({ includeDeleted = false } = {}) {
     return await runQuery(baseVinculosQuery(includeDeleted), 'vinculos.list');
   } catch (error) {
     if (String(error?.code) !== '42703') throw error;
-    return runQuery(supabase.from('vinculos').select(VINCULO_LEGACY_COLUMNS).order('created_at', { ascending: false }), 'vinculos.listLegacy');
+    return runQuery(
+      supabase.from('vinculos').select(VINCULO_LEGACY_COLUMNS).order('created_at', { ascending: false }),
+      'vinculos.listLegacy'
+    );
   }
 }
 
 export async function hasActiveVinculoByEquipamento(equipamento_id, excludedId = null) {
-  let query = applyOrganizationFilter(
-    supabase
-      .from('vinculos')
-      .select('id,status')
-      .eq('equipamento_id', equipamento_id)
-      .eq('status', 'ATIVO'),
-    'vinculos.activeCheck'
-  );
+  let query = supabase
+    .from('vinculos')
+    .select('id')
+    .eq('equipamento_id', equipamento_id)
+    .eq('status', 'ATIVO')
+    .is('deleted_at', null);
 
   if (excludedId) query = query.neq('id', excludedId);
 
@@ -48,9 +41,9 @@ export async function hasActiveVinculoByEquipamento(equipamento_id, excludedId =
 async function assertNoDuplicateActiveVinculo(payload, excludedId = null) {
   if (String(payload?.status || '').toUpperCase() !== 'ATIVO') return;
   if (await hasActiveVinculoByEquipamento(payload.equipamento_id, excludedId)) {
-    const err = new Error('Já existe vínculo ATIVO para este equipamento.');
-    err.code = 'INTEGRITY_ACTIVE_VINCULO_DUPLICATE';
-    throw err;
+    const error = new Error('Já existe vínculo ATIVO para este equipamento. Encerre o vínculo atual antes de ativar outro.');
+    error.code = 'INTEGRITY_ACTIVE_VINCULO_DUPLICATE';
+    throw error;
   }
 }
 
@@ -79,25 +72,14 @@ export const updateVinculo = async (id, payload) => {
   );
 };
 
-export const deleteVinculo = async (id) => {
-  try {
-    // soft delete (preferido)
-    return await runQuery(
-      supabase
-        .from('vinculos')
-        .update({ status: 'ENCERRADO', deleted_at: nowUtcIso(), updated_at: nowUtcIso() })
-        .eq('id', id),
-      'vinculos.softDelete'
-    );
-  } catch (error) {
-    // 42703 = deleted_at não existe (legacy)
-    if (String(error?.code) !== '42703') throw error;
-    return runQuery(
-      supabase.from('vinculos').delete().eq('id', id),
-      'vinculos.deleteLegacy'
-    );
-  }
-};
+export const deleteVinculo = async (id) =>
+  runQuery(
+    supabase
+      .from('vinculos')
+      .update({ status: 'ENCERRADO', deleted_at: nowUtcIso(), updated_at: nowUtcIso() })
+      .eq('id', id),
+    'vinculos.softDelete'
+  );
 
 export const encerrarVinculo = async (id, motivo = '') =>
   runQuery(
@@ -110,14 +92,10 @@ export const encerrarVinculo = async (id, motivo = '') =>
         motivo_encerramento: motivo || null,
         updated_at: nowUtcIso()
       })
-      .eq('id', id),
-    'vinculos.encerrar'
-  );
-
+      .eq('id', id)
       .select(VINCULO_SELECT_COLUMNS)
       .single(),
     'vinculos.encerrar'
   );
-};
 
 export const getVinculoFileUrl = (path) => getSignedFileUrl(path, 600);

@@ -1,4 +1,5 @@
-import { supabase, getFriendlyDatabaseError, toFriendlyErrorMessage } from '../supabaseClient.js';
+import { supabase, getFriendlyDatabaseError, toFriendlyErrorMessage, logSupabaseRestError } from '../supabaseClient.js';
+import { AUDIT_LOG_SELECT_COLUMNS } from '../api/selectColumns.js';
 import { state } from '../state.js';
 import { escapeHtml } from '../ui.js';
 
@@ -26,12 +27,13 @@ export async function renderAuditoria(view) {
   try {
     const { data, error } = await supabase
       .from('audit_log')
-      .select('id,user_id,action,payload,created_at')
-      .order('created_at', { ascending: false })
+      .select(AUDIT_LOG_SELECT_COLUMNS)
+      .order('occurred_at', { ascending: false })
       .limit(20);
     if (error) throw error;
     auditRows = data || [];
   } catch (e) {
+    logSupabaseRestError(e, 'auditoria.list');
     auditMsg = `Audit log indisponível: ${toFriendlyErrorMessage(e)}`;
   }
 
@@ -46,8 +48,8 @@ export async function renderAuditoria(view) {
   </tbody></table></div>
   <h3>Audit log (Supabase)</h3>
   <p class="muted">${escapeHtml(auditMsg || 'OK')}</p>
-  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Quando</th><th>Usuário</th><th>Ação</th><th>Payload</th></tr></thead><tbody>
-  ${auditRows.map((r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.created_at || '')}</td><td>${escapeHtml(r.user_id || '-')}</td><td>${escapeHtml(r.action || '')}</td><td><pre>${escapeHtml(stringifyPayload(r.payload))}</pre></td></tr>`).join('') || '<tr><td colspan="5">Não configurado</td></tr>'}
+  <div class="table-wrap"><table><thead><tr><th>ID</th><th>Quando</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Severidade</th><th>Detalhes</th></tr></thead><tbody>
+  ${auditRows.map((r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(r.occurred_at || '')}</td><td>${escapeHtml(r.actor_id || '-')}</td><td>${escapeHtml(r.action || '')}</td><td>${escapeHtml(`${r.entity || '-'} ${r.entity_id || ''}`.trim())}</td><td>${escapeHtml(r.severity || '')}</td><td><pre>${escapeHtml(stringifyPayload(r.details))}</pre></td></tr>`).join('') || '<tr><td colspan="7">Não configurado</td></tr>'}
   </tbody></table></div>
   </div>`;
 }

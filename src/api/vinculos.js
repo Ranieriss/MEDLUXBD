@@ -2,9 +2,13 @@ import { supabase, runQuery, getSignedFileUrl } from '../supabaseClient.js';
 import { VINCULO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
 import { state } from '../state.js';
+import { applyOrganizationFilter, withOrganization } from '../tenant.js';
 
 function baseVinculosQuery() {
-  return supabase.from('vinculos').select(VINCULO_SELECT_COLUMNS).order('created_at', { ascending: false });
+  return applyOrganizationFilter(
+    supabase.from('vinculos').select(VINCULO_SELECT_COLUMNS).order('created_at', { ascending: false }),
+    'vinculos.base'
+  );
 }
 
 export async function listVinculos() {
@@ -12,8 +16,17 @@ export async function listVinculos() {
 }
 
 export async function hasActiveVinculoByEquipamento(equipamento_id, excludedId = null) {
-  let query = supabase.from('vinculos').select('id,status').eq('equipamento_id', equipamento_id).eq('status', 'ATIVO');
+  let query = applyOrganizationFilter(
+    supabase
+      .from('vinculos')
+      .select('id,status')
+      .eq('equipamento_id', equipamento_id)
+      .eq('status', 'ATIVO'),
+    'vinculos.activeCheck'
+  );
+
   if (excludedId) query = query.neq('id', excludedId);
+
   const rows = await runQuery(query.limit(1), 'vinculos.activeCheck');
   return rows?.length > 0;
 }
@@ -30,7 +43,16 @@ async function assertNoDuplicateActiveVinculo(payload, excludedId = null) {
 export async function createVinculo(payload) {
   await assertNoDuplicateActiveVinculo(payload);
   return runQuery(
-    supabase.from('vinculos').insert({ ...payload, created_at: payload.created_at || nowUtcIso() }).select(VINCULO_SELECT_COLUMNS).single(),
+    supabase
+      .from('vinculos')
+      .insert(
+        withOrganization(
+          { ...payload, created_at: payload.created_at || nowUtcIso() },
+          'vinculos.create'
+        )
+      )
+      .select(VINCULO_SELECT_COLUMNS)
+      .single(),
     'vinculos.create'
   );
 }
@@ -38,25 +60,37 @@ export async function createVinculo(payload) {
 export async function updateVinculo(id, payload) {
   await assertNoDuplicateActiveVinculo(payload, id);
   return runQuery(
-    supabase.from('vinculos').update({ ...payload, updated_at: nowUtcIso() }).eq('id', id).select(VINCULO_SELECT_COLUMNS).single(),
+    applyOrganizationFilter(
+      supabase.from('vinculos').update({ ...payload, updated_at: nowUtcIso() }).eq('id', id),
+      'vinculos.update'
+    )
+      .select(VINCULO_SELECT_COLUMNS)
+      .single(),
     'vinculos.update'
   );
 }
 
-export const deleteVinculo = (id) => runQuery(supabase.from('vinculos').delete().eq('id', id), 'vinculos.delete');
+
+export const deleteVinculo = (id) => runQuery(
+  applyOrganizationFilter(supabase.from('vinculos').delete().eq('id', id), 'vinculos.delete'),
+  'vinculos.delete'
+);
 
 export const encerrarVinculo = (id, motivo = '') =>
   runQuery(
-    supabase
-      .from('vinculos')
-      .update({
-        encerrou_em: nowUtcIso(),
-        status: 'ENCERRADO',
-        encerrado_por: state.user?.email || state.user?.id || 'unknown',
-        motivo_encerramento: motivo || null,
-        updated_at: nowUtcIso()
-      })
-      .eq('id', id)
+    applyOrganizationFilter(
+      supabase
+        .from('vinculos')
+        .update({
+          encerrou_em: nowUtcIso(),
+          status: 'ENCERRADO',
+          encerrado_por: state.user?.email || state.user?.id || 'unknown',
+          motivo_encerramento: motivo || null,
+          updated_at: nowUtcIso()
+        })
+        .eq('id', id),
+      'vinculos.encerrar'
+    )
       .select(VINCULO_SELECT_COLUMNS)
       .single(),
     'vinculos.encerrar'

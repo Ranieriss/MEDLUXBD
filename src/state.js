@@ -3,6 +3,7 @@ export const state = {
   session: null,
   user: null,
   profile: null,
+  organization_id: null,
   role: 'USER',
   errors: [],
   events: [],

@@ -41,7 +41,7 @@ function renderShell() {
   topbar.querySelector('#logout').onclick = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) addDiagnosticError(error, 'auth.logout');
-    setState({ session: null, user: null, profile: null, role: 'USER' });
+    setState({ session: null, user: null, profile: null, organization_id: null, role: 'USER' });
     addEvent({ type: 'logout', message: 'Logout realizado' });
     navigate('/login');
   };
@@ -49,27 +49,34 @@ function renderShell() {
 
 async function loadProfile() {
   if (!state.user?.id) return;
+  const metadataOrgId = state.user?.user_metadata?.organization_id || null;
   let profile = await getMyProfile(state.user.id);
   if (!profile) {
     profile = await upsertProfile({
       id: state.user.id,
       role: 'USER',
       email: state.user.email,
-      nome: (state.user.email || '').split('@')[0] || 'Usuário'
+      nome: (state.user.email || '').split('@')[0] || 'Usuário',
+      organization_id: metadataOrgId
     });
   }
 
   const completeProfile = ensureProfileShape(profile, {
     id: state.user.id,
     email: state.user.email,
-    role: 'USER'
+    role: 'USER',
+    organization_id: metadataOrgId
   });
 
   if (!profile?.nome || !profile?.email || !profile?.role) {
     await upsertProfile(completeProfile);
   }
 
-  setState({ profile: completeProfile, role: completeProfile.role || 'USER' });
+  setState({
+    profile: completeProfile,
+    organization_id: completeProfile.organization_id || metadataOrgId || null,
+    role: completeProfile.role || 'USER'
+  });
 }
 
 registerRoute('/login', renderLogin);

@@ -3,6 +3,7 @@ import { toast } from './ui.js';
 
 const routes = new Map();
 let beforeEach = null;
+let consumedInitialCodeParam = false;
 
 export function registerRoute(path, render) { routes.set(path, render); }
 export function setGuard(fn) { beforeEach = fn; }
@@ -15,14 +16,20 @@ export function navigate(path) {
 function resolveHashRoute() {
   const rawHash = window.location.hash.replace('#', '') || '/dashboard';
   const searchParams = new URLSearchParams(window.location.search);
+  const hashRoute = rawHash.split('?')[0].split('#')[0] || '/dashboard';
   const hashLooksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
   const hasRecoveryCode = searchParams.has('code');
 
-  if (hashLooksLikeRecoveryToken || hasRecoveryCode) {
+  if (hashRoute === '/update-password' || hashLooksLikeRecoveryToken) {
     return '/update-password';
   }
 
-  return rawHash.split('?')[0].split('#')[0];
+  if (hasRecoveryCode && !consumedInitialCodeParam) {
+    consumedInitialCodeParam = true;
+    return '/update-password';
+  }
+
+  return hashRoute;
 }
 
 export async function handleRoute() {

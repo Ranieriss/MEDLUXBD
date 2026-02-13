@@ -10,6 +10,7 @@ import {
   supabase
 } from '../supabaseClient.js';
 import { navigate } from '../router.js';
+import { fetchWithTimeout } from '../http.js';
 import { toast } from '../ui.js';
 import {
   cleanAuthParamsFromUrl,
@@ -38,7 +39,7 @@ async function navigateToLogin(email = '') {
 
 export async function renderUpdatePassword(view) {
   try {
-    const template = await fetch('./src/pages/reset-password.html');
+    const template = await fetchWithTimeout('./src/pages/reset-password.html', {}, 8000);
     if (template.ok) view.innerHTML = await template.text();
   } catch (_) {
     // fallback below

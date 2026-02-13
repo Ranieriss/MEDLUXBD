@@ -102,6 +102,7 @@ subscribe(() => renderShell());
 window.addEventListener('error', (ev) => {
   appLogger.error('window.error', {
     action: 'window.error',
+    entity: 'app',
     details: {
       message: ev.message,
       source: ev.filename,
@@ -115,6 +116,7 @@ window.addEventListener('error', (ev) => {
 window.addEventListener('unhandledrejection', (ev) => {
   appLogger.error('unhandledrejection', {
     action: 'window.unhandledrejection',
+    entity: 'app',
     details: {
       reason: ev.reason?.message || String(ev.reason)
     }
@@ -146,7 +148,7 @@ window.addEventListener('unhandledrejection', (ev) => {
     renderShell();
     handleRoute();
   } catch (err) {
-    appLogger.error('boot failed', { action: 'boot', details: { message: err?.message } });
+    appLogger.error('boot failed', { action: 'boot', entity: 'app', details: { message: err?.message } });
     await handleGlobalError(err, 'boot');
   }
 })();

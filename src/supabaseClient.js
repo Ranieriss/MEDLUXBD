@@ -4,8 +4,8 @@ import {
   SUPABASE_URL,
   validateSupabaseConfig
 } from './config.js';
-import { addDiagnosticError } from './state.js';
-import { toast } from './ui.js';
+import { addDiagnosticError, addEvent, isAdmin } from './state.js';
+import { toast, openModal, escapeHtml } from './ui.js';
 import { createLogger } from './logger.js';
 import { tryAuditLog } from './audit.js';
 
@@ -32,6 +32,35 @@ const DATABASE_ERROR_MESSAGES = {
   '23502': 'Campo obrigatório não preenchido',
   '42703': 'Seu frontend está pedindo uma coluna que não existe no banco. Verifique versão do schema.'
 };
+
+export function normalizeAppError(error, context = 'app') {
+  const status = Number(error?.status || 0);
+  const code = String(error?.code || '');
+  const message = String(error?.message || error || 'Erro desconhecido');
+  let friendly = toFriendlyErrorMessage(error);
+  if (status === 401 || status === 403) friendly = 'Sem permissão para esta ação. Faça login novamente ou valide seu perfil.';
+  if (status === 400) friendly = 'Requisição inválida. Revise os campos obrigatórios e tente novamente.';
+  if (code === '42703') friendly = DATABASE_ERROR_MESSAGES['42703'];
+  if (message.toLowerCase().includes('failed to fetch')) friendly = 'Falha de rede ao comunicar com Supabase.';
+  return { status, code, context, message, friendly, raw: error };
+}
+
+export function handleAppError(error, context = 'app') {
+  const normalized = normalizeAppError(error, context);
+  toast(normalized.friendly, 'error');
+  addEvent({ type: 'ERROR', message: `${context}: ${normalized.friendly}`, details: { code: normalized.code, status: normalized.status } });
+  if (isAdmin()) {
+    const content = document.createElement('div');
+    content.innerHTML = `<p>${escapeHtml(normalized.friendly)}</p><details><summary>Detalhes técnicos (ADMIN)</summary><pre>${escapeHtml(JSON.stringify({
+      status: normalized.status,
+      code: normalized.code,
+      message: normalized.message,
+      context
+    }, null, 2))}</pre></details>`;
+    openModal('Erro da operação', content);
+  }
+  return normalized;
+}
 
 export function getFriendlyDatabaseError(error) {
   const code = error?.code ? String(error.code) : '';
@@ -128,6 +157,7 @@ export async function runQuery(promise, context = 'api', meta = {}) {
   } catch (error) {
     logSupabaseRestError(error, context);
     addDiagnosticError(error, context);
+    handleAppError(error, context);
     await tryAuditLog({ action: 'ERROR', entity: context, severity: 'ERROR', details: { ...meta, message: error?.message, status: error?.status, code: error?.code } });
     throw error;
   }

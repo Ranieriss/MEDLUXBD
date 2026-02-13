@@ -23,6 +23,7 @@ export async function tryAuditLog({
 }) {
   const payload = {
     user_id: state.user?.id || null,
+    // Single-tenant: não depende disso (DB pode preencher), mas se existir ajuda para rastreio
     organization_id: state.profile?.organization_id || state.organization_id || null,
     action: `${action}:${entity}`,
     created_at: nowUtcIso(),
@@ -49,3 +50,4 @@ export async function tryAuditLog({
     return false;
   }
 }
+

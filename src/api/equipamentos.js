@@ -1,44 +1,80 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 import { EQUIPAMENTO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
-import { applyOrganizationFilter, withOrganization } from '../tenant.js';
+const EQUIPAMENTO_LEGACY_COLUMNS = 'id,codigo,nome,modelo,tipo,status,created_at,updated_at';
 
-export async function listEquipamentos() {
-  return runQuery(
-    applyOrganizationFilter(
-      supabase.from('equipamentos').select(EQUIPAMENTO_SELECT_COLUMNS).order('created_at', { ascending: false }),
-      'equipamentos.list'
-    ),
-    'equipamentos.list'
-  );
+export async function listEquipamentos({ includeDeleted = false } = {}) {
+  try {
+    let query = supabase
+      .from('equipamentos')
+      .select(EQUIPAMENTO_SELECT_COLUMNS)
+      .order('created_at', { ascending: false });
+
+    // Soft delete (se existir a coluna deleted_at)
+    if (!includeDeleted) query = query.is('deleted_at', null);
+
+    return await runQuery(query, 'equipamentos.list');
+  } catch (error) {
+    // 42703 = coluna não existe (legacy)
+    if (String(error?.code) !== '42703') throw error;
+
+    return runQuery(
+      supabase
+        .from('equipamentos')
+        .select(EQUIPAMENTO_LEGACY_COLUMNS)
+        .order('created_at', { ascending: false }),
+      'equipamentos.listLegacy'
+    );
+  }
 }
 
-export const createEquipamento = (payload) => runQuery(
-  supabase
-    .from('equipamentos')
-    .insert(withOrganization({ ...payload, created_at: payload.created_at || nowUtcIso() }, 'equipamentos.create'))
-    .select(EQUIPAMENTO_SELECT_COLUMNS)
-    .single(),
-  'equipamentos.create'
-);
+export const createEquipamento = async (payload) => {
+  return runQuery(
+    supabase
+      .from('equipamentos')
+      .insert({ ...payload, created_at: payload.created_at || nowUtcIso() })
+      .select(EQUIPAMENTO_SELECT_COLUMNS)
+      .single(),
+    'equipamentos.create'
+  );
+};
 
-export const updateEquipamento = (id, payload) => runQuery(
-  applyOrganizationFilter(
-    supabase.from('equipamentos').update({ ...payload, updated_at: nowUtcIso() }).eq('id', id),
+export const updateEquipamento = async (id, payload) => {
+  return runQuery(
+    supabase
+      .from('equipamentos')
+      .update({ ...payload, updated_at: nowUtcIso() })
+      .eq('id', id)
+      .select(EQUIPAMENTO_SELECT_COLUMNS)
+      .single(),
     'equipamentos.update'
-  )
-    .select(EQUIPAMENTO_SELECT_COLUMNS)
-    .single(),
-  'equipamentos.update'
-);
+  );
+};
 
-export const deleteEquipamento = (id) => runQuery(
-  applyOrganizationFilter(
-    supabase.from('equipamentos').update({ status: 'INATIVO', updated_at: nowUtcIso() }).eq('id', id),
-    'equipamentos.softDelete'
-  ),
-  'equipamentos.softDelete'
-);
+export const deleteEquipamento = async (id) => {
+  try {
+    // Soft delete com deleted_at (quando existir)
+    return await runQuery(
+      supabase
+        .from('equipamentos')
+        .update({ status: 'INATIVO', deleted_at: nowUtcIso(), updated_at: nowUtcIso() })
+        .eq('id', id),
+      'equipamentos.softDelete'
+    );
+  } catch (error) {
+    // fallback legacy (sem deleted_at)
+    if (String(error?.code) !== '42703') throw error;
+
+    return runQuery(
+      supabase
+        .from('equipamentos')
+        .update({ status: 'INATIVO', updated_at: nowUtcIso() })
+        .eq('id', id),
+      'equipamentos.softDeleteLegacy'
+    );
+  }
+};
+
 
 export async function hasEquipamentoDependencies(id) {
   const [medicoes, vinculos] = await Promise.all([

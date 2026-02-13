@@ -22,6 +22,7 @@ export function createLogger(context) {
   const write = (level, message, meta = {}) => {
     const route = window.location.hash.replace('#', '') || '/';
     const payload = {
+      context: base.context,
       timestamp: nowUtcIso(),
       level,
       route,
@@ -32,6 +33,7 @@ export function createLogger(context) {
       correlation_id: base.correlationId,
       app_version: APP_VERSION
     };
+
     if (level === 'ERROR') {
       addDiagnosticError(new Error(message), context);
       console.error('[MEDLUXBD]', payload);
@@ -40,6 +42,7 @@ export function createLogger(context) {
     } else {
       console.info('[MEDLUXBD]', payload);
     }
+
     addEvent({ type: level, message: `${context}: ${message}`, meta: payload.details, correlationId: base.correlationId });
     return payload;
   };

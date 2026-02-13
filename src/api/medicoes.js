@@ -4,11 +4,12 @@ import { nowUtcIso } from '../shared_datetime.js';
 import { state } from '../state.js';
 import { applyOrganizationFilter, withOrganization } from '../tenant.js';
 
-export async function listMedicoes(filters = {}) {
+export async function listMedicoes(filters = {}, options = {}) {
   let q = applyOrganizationFilter(
     supabase.from('medicoes').select(MEDICAO_SELECT_COLUMNS).order('medido_em', { ascending: false }),
     'medicoes.list'
   );
+  if (!options.includeDeleted) q = q.is('deleted_at', null);
   if (filters.obra_id) q = q.eq('obra_id', filters.obra_id);
   if (filters.equipamento_id) q = q.eq('equipamento_id', filters.equipamento_id);
   return runQuery(q, 'medicoes.list');

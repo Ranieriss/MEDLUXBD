@@ -92,22 +92,22 @@ export async function renderUpdatePassword(view) {
     event.preventDefault();
 
     try {
-      const password = newPasswordEl.value;
+      const newPassword = newPasswordEl.value;
       const confirmPassword = confirmPasswordEl.value;
 
-      if (!password || !confirmPassword) {
+      if (!newPassword || !confirmPassword) {
         return setErr('Preencha os campos de senha.');
       }
 
-      if (password.length < 8) {
+      if (newPassword.length < 8) {
         return setErr('A senha deve ter pelo menos 8 caracteres.');
       }
 
-      if (password !== confirmPassword) {
+      if (newPassword !== confirmPassword) {
         return setErr('As senhas não conferem.');
       }
 
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
       cleanAuthParamsFromUrl('/update-password');

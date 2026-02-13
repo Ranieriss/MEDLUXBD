@@ -102,6 +102,10 @@ window.addEventListener('unhandledrejection', (ev) => {
       cleanAuthParamsFromUrl('/update-password');
     }
 
+    if (hasRecoveryParams()) {
+      cleanAuthParamsFromUrl(window.location.hash.replace('#', '') || '/dashboard');
+    }
+
     const { data } = await supabase.auth.getSession();
     setState({ session: data.session, user: data.session?.user || null });
     if (data.session?.user) await loadProfile();

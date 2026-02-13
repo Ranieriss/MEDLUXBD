@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient.js';
 import { state } from './state.js';
-import { nowUtcIso } from './shared_datetime.js';
 import { APP_VERSION } from './version.js';
 import { pageCorrelationId } from './logger.js';
 
@@ -28,11 +27,9 @@ export async function tryAuditLog({
   route = window.location.hash.replace('#', '') || '/'
 }) {
   const normalizedSeverity = normalizeSeverity(action, severity);
-  const payload = {
+  const row = {
     user_id: state.user?.id || null,
-    organization_id: state.profile?.organization_id || state.organization_id || null,
     action: `${action}:${entity}`,
-    created_at: nowUtcIso(),
     payload: {
       entity,
       entity_id: entityId,
@@ -47,7 +44,7 @@ export async function tryAuditLog({
   };
 
   try {
-    const { error } = await supabase.from('audit_log').insert(payload);
+    const { error } = await supabase.from('audit_log').insert(row);
     if (error) throw error;
     return true;
   } catch (error) {

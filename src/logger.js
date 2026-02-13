@@ -37,10 +37,9 @@ export function createLogger(context) {
       level,
       route,
       action: sanitizedMeta.action || context,
-      entity: sanitizedMeta.entity || null,
+      entity: sanitizedMeta.entity || context,
       message,
       details: sanitizedMeta.details || null,
-      meta: sanitizedMeta,
       correlation_id: sanitizedMeta.correlation_id || base.correlationId,
       app_version: APP_VERSION
     };
@@ -54,7 +53,7 @@ export function createLogger(context) {
       console.info('[MEDLUXBD]', payload);
     }
 
-    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.meta, correlation_id: payload.correlation_id });
+    addEvent({ type: level, message: `${context}: ${message}`, details: payload.details, correlation_id: payload.correlation_id });
     void sendAppLog(payload);
     return payload;
   };

@@ -110,20 +110,25 @@ export function getSupabaseErrorMessage(error) {
 
 export function logSupabaseAuthError(error, context = 'auth') {
   clientLogger.error('Supabase auth error', {
-    context,
-    error,
-    status: error?.status ?? null,
-    code: error?.code ?? null,
-    message: error?.message ?? String(error)
+    action: 'auth_error',
+    entity: context,
+    details: {
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      message: error?.message ?? String(error)
+    }
   });
 }
 
 export function logSupabaseRestError(error, context = 'rest') {
   clientLogger.error('Supabase REST error', {
-    context,
-    status: error?.status ?? null,
-    code: error?.code ?? null,
-    message: error?.message ?? String(error)
+    action: 'rest_error',
+    entity: context,
+    details: {
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      message: error?.message ?? String(error)
+    }
   });
 }
 

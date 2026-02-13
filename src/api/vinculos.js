@@ -72,14 +72,16 @@ export const updateVinculo = async (id, payload) => {
   );
 };
 
-export const deleteVinculo = async (id) =>
-  runQuery(
+export const deleteVinculo = async (id) => {
+  const deletedAt = nowUtcIso();
+  return runQuery(
     supabase
       .from('vinculos')
-      .update({ status: 'ENCERRADO', deleted_at: nowUtcIso(), updated_at: nowUtcIso() })
+      .update({ status: 'ENCERRADO', deleted_at: deletedAt, encerrou_em: deletedAt, updated_at: deletedAt })
       .eq('id', id),
     'vinculos.softDelete'
   );
+};
 
 export const encerrarVinculo = async (id, motivo = '') =>
   runQuery(

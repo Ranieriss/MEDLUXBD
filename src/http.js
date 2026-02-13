@@ -27,10 +27,14 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       : error;
 
     httpLogger.error('fetchWithTimeout failed', {
-      endpoint: url,
-      method,
-      status: normalizedError?.status || null,
-      message: normalizedError?.message || String(normalizedError)
+      action: 'fetchWithTimeout',
+      entity: 'http',
+      details: {
+        endpoint: url,
+        method,
+        status: normalizedError?.status || null,
+        message: normalizedError?.message || String(normalizedError)
+      }
     });
 
     throw normalizedError;

@@ -39,10 +39,17 @@ async function navigateToLogin(email = '') {
 }
 
 export async function renderUpdatePassword(view) {
-  view.innerHTML = `
+  try {
+    const template = await fetch('./src/pages/reset-password.html');
+    if (template.ok) view.innerHTML = await template.text();
+  } catch (_) {
+    // fallback below
+  }
+
+  if (!view.innerHTML.trim()) view.innerHTML = `
     <div class="login-wrap">
       <div class="panel" style="max-width:460px;width:100%;">
-        <h2>Atualizar senha</h2>
+        <h2>Redefinir senha</h2>
         <p class="muted" id="update-password-message">Validando link de recuperação...</p>
         <div id="auth-error" class="muted"></div>
         <form id="update-password-form" class="grid" style="display:none;">
@@ -110,7 +117,7 @@ export async function renderUpdatePassword(view) {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
-      cleanAuthParamsFromUrl('/update-password');
+      cleanAuthParamsFromUrl('/reset-password');
       toast('Senha atualizada com sucesso. Faça login novamente.');
       addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
       await supabase.auth.signOut();
@@ -134,7 +141,7 @@ export async function renderUpdatePassword(view) {
         setErr(setFromUrlResult.error);
       }
 
-      cleanAuthParamsFromUrl('/update-password');
+      cleanAuthParamsFromUrl('/reset-password');
     }
 
     const { data, error } = await supabase.auth.getSession();

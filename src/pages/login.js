@@ -15,7 +15,7 @@ import { getBasePath } from '../url.js';
 let authActionInFlight = false;
 
 function getRedirectToUpdatePassword() {
-  return `${window.location.origin}${getBasePath()}#/update-password`;
+  return `${window.location.origin}${getBasePath()}#/reset-password`;
 }
 
 async function tryAutoLoginAfterSignupConflict(email, password, setInfo) {

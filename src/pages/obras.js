@@ -1,6 +1,7 @@
 import { createObra, deleteObra, listObras, updateObra } from '../api/obras.js';
 import { state } from '../state.js';
 import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { toFriendlyErrorMessage } from '../supabaseClient.js';
 
 function obraForm(item = {}) {
   const wrap = document.createElement('div');
@@ -33,7 +34,7 @@ export async function renderObras(view) {
     view.querySelector('#busca').oninput = (e) => { const q = e.target.value.toLowerCase(); filtered = items.filter((i) => `${i.codigo} ${i.nome} ${i.local || ''}`.toLowerCase().includes(q)); draw(); view.querySelector('#busca').value = q; };
     view.querySelector('#novo').onclick = () => showModal();
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => showModal(items.find((x) => x.id === b.dataset.edit)));
-    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir obra?')) return; await deleteObra(b.dataset.del); toast('Obra excluída'); renderObras(view); });
+    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir obra?')) return; try { await deleteObra(b.dataset.del); toast('Obra excluída'); renderObras(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
   };
 
   const showModal = (item = null) => {
@@ -42,10 +43,14 @@ export async function renderObras(view) {
     content.querySelector('#save').onclick = async () => {
       const payload = Object.fromEntries(new FormData(content.querySelector('form')).entries());
       if (!payload.codigo || !payload.nome) return toast('Código e nome obrigatórios', 'error');
-      if (item) await updateObra(item.id, payload); else await createObra(payload);
-      closeModal();
-      renderObras(view);
-      toast('Salvo');
+      try {
+        if (item) await updateObra(item.id, payload); else await createObra(payload);
+        closeModal();
+        renderObras(view);
+        toast('Salvo');
+      } catch (error) {
+        toast(toFriendlyErrorMessage(error), 'error');
+      }
     };
   };
   draw();

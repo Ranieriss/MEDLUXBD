@@ -4,6 +4,7 @@ import { listObras } from '../api/obras.js';
 import { uploadTermo } from '../api/storage.js';
 import { state } from '../state.js';
 import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { toFriendlyErrorMessage } from '../supabaseClient.js';
 
 const daysWithUser = (date) => date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : '-';
 
@@ -33,8 +34,8 @@ export async function renderVinculos(view) {
   view.innerHTML = `<div class="panel"><div class="row"><h2>Vínculos</h2><button id="novo" class="small">Novo</button></div>
     <div class="table-wrap"><table><thead><tr><th>Equipamento</th><th>Obra</th><th>User</th><th>Entrega</th><th>Dias c/ usuário</th><th>Termo</th><th>Ações</th></tr></thead><tbody>
     ${items.map((i) => `<tr>
-      <td>${escapeHtml(eqMap[i.equipamento_id]?.codigo || i.equipamento_id)}</td>
-      <td>${escapeHtml(obMap[i.obra_id]?.codigo || i.obra_id)}</td>
+      <td>${escapeHtml(i.equipamento?.codigo || eqMap[i.equipamento_id]?.codigo || i.equipamento_id)}</td>
+      <td>${escapeHtml(i.obra?.codigo || obMap[i.obra_id]?.codigo || i.obra_id)}</td>
       <td>${escapeHtml(i.user_id)}</td>
       <td>${escapeHtml(i.data_entrega || '')}</td>
       <td>${daysWithUser(i.data_entrega)}</td>
@@ -47,35 +48,43 @@ export async function renderVinculos(view) {
     const content = vinculoForm({ item: item || {}, equipamentos, obras });
     openModal(item ? 'Editar vínculo' : 'Novo vínculo', content);
     content.querySelector('#save-v').onclick = async () => {
-      const form = content.querySelector('form');
-      const fd = new FormData(form);
-      const payload = Object.fromEntries(fd.entries());
-      if (!payload.equipamento_id || !payload.obra_id || !payload.user_id || !payload.data_entrega) {
-        return toast('Campos obrigatórios: equipamento, obra, user_id, entrega', 'error');
+      try {
+        const form = content.querySelector('form');
+        const fd = new FormData(form);
+        const payload = Object.fromEntries(fd.entries());
+        if (!payload.equipamento_id || !payload.obra_id || !payload.user_id || !payload.data_entrega) {
+          return toast('Campos obrigatórios: equipamento, obra, user_id, entrega', 'error');
+        }
+        const file = form.querySelector('input[name="termo"]').files[0];
+        if (file) {
+          const obraCodigo = (obras.find((o) => o.id === payload.obra_id)?.codigo || 'obra').toString();
+          const equipamentoCodigo = (equipamentos.find((e) => e.id === payload.equipamento_id)?.codigo || 'equip').toString();
+          payload.termo_path = await uploadTermo({ file, obraCodigo, equipamentoCodigo });
+        }
+        delete payload.termo;
+        if (item) await updateVinculo(item.id, payload); else await createVinculo(payload);
+        closeModal();
+        toast('Vínculo salvo');
+        renderVinculos(view);
+      } catch (error) {
+        toast(toFriendlyErrorMessage(error), 'error');
       }
-      const file = form.querySelector('input[name="termo"]').files[0];
-      if (file) {
-        const obraCodigo = (obras.find((o) => o.id === payload.obra_id)?.codigo || 'obra').toString();
-        const equipamentoCodigo = (equipamentos.find((e) => e.id === payload.equipamento_id)?.codigo || 'equip').toString();
-        payload.termo_path = await uploadTermo({ file, obraCodigo, equipamentoCodigo });
-      }
-      delete payload.termo;
-      if (item) await updateVinculo(item.id, payload); else await createVinculo(payload);
-      closeModal();
-      toast('Vínculo salvo');
-      renderVinculos(view);
     };
   };
 
   view.querySelector('#novo').onclick = () => openEditor();
   view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find((i) => i.id === b.dataset.edit)));
-  view.querySelectorAll('[data-end]').forEach((b) => b.onclick = async () => { await encerrarVinculo(b.dataset.end); toast('Vínculo encerrado'); renderVinculos(view); });
-  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir vínculo?')) return; await deleteVinculo(b.dataset.del); renderVinculos(view); });
+  view.querySelectorAll('[data-end]').forEach((b) => b.onclick = async () => { try { await encerrarVinculo(b.dataset.end); toast('Vínculo encerrado'); renderVinculos(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { try { if (!confirmDialog('Excluir vínculo?')) return; await deleteVinculo(b.dataset.del); renderVinculos(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
   view.querySelectorAll('[data-arq]').forEach((b) => b.onclick = async () => {
     const item = items.find((i) => i.id === b.dataset.arq);
     if (!item?.termo_path) return;
-    const url = await getVinculoFileUrl(item.termo_path);
-    if (!url) return toast('Não foi possível gerar URL do arquivo. Verifique policy do bucket.', 'error');
-    window.open(url, '_blank');
+    try {
+      const url = await getVinculoFileUrl(item.termo_path);
+      if (!url) return toast('Não foi possível gerar URL do arquivo. Verifique policy do bucket.', 'error');
+      window.open(url, '_blank');
+    } catch (error) {
+      toast(toFriendlyErrorMessage(error), 'error');
+    }
   });
 }

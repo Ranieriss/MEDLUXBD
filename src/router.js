@@ -1,6 +1,6 @@
 import { addDiagnosticError, state } from './state.js';
 import { supabase, toFriendlyErrorMessage } from './supabaseClient.js';
-import { toast } from './ui.js';
+import { handleGlobalError } from './errorHandling.js';
 
 const routes = new Map();
 let beforeEach = null;
@@ -36,7 +36,7 @@ export async function safeLoad(fn, context = 'router.safeLoad') {
   } catch (e) {
     addDiagnosticError(e, context);
     const message = toFriendlyErrorMessage(e, 'Não foi possível carregar os dados desta página.');
-    toast(message, 'error');
+    await handleGlobalError(e, context);
     renderError(message, { context, endpoint: e?.url || null, status: e?.status || null, message: e?.message || String(e) });
     return false;
   }
@@ -100,7 +100,7 @@ export async function handleRoute() {
   } catch (error) {
     addDiagnosticError(error, `router.handleRoute:${hash}`);
     const message = toFriendlyErrorMessage(error, 'Erro ao abrir a página.');
-    toast(message, 'error');
+    await handleGlobalError(error, `router.handleRoute:${hash}`);
     renderError(message, { endpoint: error?.url || null, status: error?.status || null, message: error?.message || String(error) });
   }
 }

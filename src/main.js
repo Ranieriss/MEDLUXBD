@@ -1,7 +1,6 @@
 import { assertSupabaseConfig, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
-import { toast } from './ui.js';
 import { ensureProfileShape, getMyProfile, upsertProfile } from './api/profiles.js';
 import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
@@ -14,6 +13,7 @@ import { renderUpdatePassword } from './pages/updatePassword.js';
 import { cleanAuthParamsFromUrl, hasRecoveryParams } from './auth/callback.js';
 import { APP_VERSION } from './version.js';
 import { createLogger } from './logger.js';
+import { handleGlobalError } from './errorHandling.js';
 
 const appLogger = createLogger('app');
 const links = [
@@ -93,14 +93,12 @@ setGuard(async (hash) => {
 subscribe(() => renderShell());
 
 window.addEventListener('error', (ev) => {
-  appLogger.error('window.error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno });
-  addDiagnosticError(ev.error || new Error(ev.message), 'window.error');
-  toast(`Erro: ${ev.message}`, 'error');
+  appLogger.error('window.error', { action: 'window.error', details: { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno } });
+  handleGlobalError(ev.error || new Error(ev.message), 'window.error');
 });
 window.addEventListener('unhandledrejection', (ev) => {
-  appLogger.error('unhandledrejection', { reason: ev.reason?.message || String(ev.reason) });
-  addDiagnosticError(ev.reason, 'unhandledrejection');
-  toast(`Falha não tratada: ${ev.reason?.message || ev.reason}`, 'error');
+  appLogger.error('unhandledrejection', { action: 'window.unhandledrejection', details: { reason: ev.reason?.message || String(ev.reason) } });
+  handleGlobalError(ev.reason, 'window.unhandledrejection');
 });
 
 (async function boot() {
@@ -127,8 +125,7 @@ window.addEventListener('unhandledrejection', (ev) => {
     renderShell();
     handleRoute();
   } catch (err) {
-    addDiagnosticError(err, 'boot');
-    appLogger.error('boot failed', { message: err?.message });
-    toast(`Falha ao inicializar app: ${err.message}`, 'error');
+    appLogger.error('boot failed', { action: 'boot', details: { message: err?.message } });
+    await handleGlobalError(err, 'boot');
   }
 })();

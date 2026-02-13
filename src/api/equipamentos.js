@@ -27,7 +27,7 @@ export const deleteEquipamento = (id) => runQuery(
 export async function hasEquipamentoDependencies(id) {
   const [medicoes, vinculos] = await Promise.all([
     runQuery(supabase.from('medicoes').select('id').eq('equipamento_id', id).limit(1), 'equipamentos.dep.medicoes'),
-    runQuery(supabase.from('vinculos').select('id').eq('equipamento_id', id).limit(1), 'equipamentos.dep.vinculos')
+    runQuery(supabase.from('vinculos').select('id').eq('equipamento_id', id).eq('status', 'ATIVO').limit(1), 'equipamentos.dep.vinculosAtivos')
   ]);
   return (medicoes?.length || 0) > 0 || (vinculos?.length || 0) > 0;
 }

@@ -1,6 +1,6 @@
-import { createObra, deleteObra, listObras, updateObra } from '../api/obras.js';
+import { createObra, deleteObra, hasObraDependencies, listObras, updateObra } from '../api/obras.js';
 import { state } from '../state.js';
-import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml, confirmDestructiveModal } from '../ui.js';
 import { toFriendlyErrorMessage } from '../supabaseClient.js';
 import { validateObra } from '../validators.js';
 import { tryAuditLog } from '../audit.js';
@@ -37,9 +37,10 @@ export async function renderObras(view) {
     view.querySelector('#novo').onclick = () => showModal();
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => showModal(items.find((x) => x.id === b.dataset.edit)));
     view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-      const typed = window.prompt('Confirmação forte: digite EXCLUIR para inativar.');
-      if (typed !== 'EXCLUIR') return;
-      try { await deleteObra(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'obras', entityId: b.dataset.del, details: { mode: 'soft_delete' } }); toast('Obra inativada'); renderObras(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
+      const confirmed = await confirmDestructiveModal('Confirme a inativação da obra.');
+      if (!confirmed) return;
+      if (await hasObraDependencies(b.dataset.del)) return toast('Bloqueado: obra possui vínculos ou medições.', 'error');
+      try { await deleteObra(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'obras', entityId: b.dataset.del, severity: 'WARN', details: { mode: 'soft_delete' } }); toast('Obra inativada'); renderObras(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
     });
   };
 
@@ -56,7 +57,7 @@ export async function renderObras(view) {
       }
       try {
         if (item) await updateObra(item.id, payload); else await createObra(payload);
-        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'obras', entityId: item?.id || null, details: { codigo: payload.codigo } });
+        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'obras', entityId: item?.id || null, before: item, after: payload, details: { codigo: payload.codigo } });
         closeModal();
         toast('Obra salva');
         renderObras(view);

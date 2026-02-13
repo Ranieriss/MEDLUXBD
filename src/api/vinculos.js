@@ -11,23 +11,37 @@ export async function listVinculos() {
   return runQuery(baseVinculosQuery(), 'vinculos.list');
 }
 
-export async function hasActiveVinculoByEquipamento(equipamento_id) {
-  const rows = await runQuery(
-    supabase.from('vinculos').select('id,status').eq('equipamento_id', equipamento_id).eq('status', 'ATIVO').limit(1),
-    'vinculos.activeCheck'
-  );
+export async function hasActiveVinculoByEquipamento(equipamento_id, excludedId = null) {
+  let query = supabase.from('vinculos').select('id,status').eq('equipamento_id', equipamento_id).eq('status', 'ATIVO');
+  if (excludedId) query = query.neq('id', excludedId);
+  const rows = await runQuery(query.limit(1), 'vinculos.activeCheck');
   return rows?.length > 0;
 }
 
-export const createVinculo = (payload) => runQuery(
-  supabase.from('vinculos').insert({ ...payload, created_at: payload.created_at || nowUtcIso() }).select(VINCULO_SELECT_COLUMNS).single(),
-  'vinculos.create'
-);
+async function assertNoDuplicateActiveVinculo(payload, excludedId = null) {
+  if (String(payload?.status || '').toUpperCase() !== 'ATIVO') return;
+  if (await hasActiveVinculoByEquipamento(payload.equipamento_id, excludedId)) {
+    const err = new Error('Já existe vínculo ATIVO para este equipamento.');
+    err.code = 'INTEGRITY_ACTIVE_VINCULO_DUPLICATE';
+    throw err;
+  }
+}
 
-export const updateVinculo = (id, payload) => runQuery(
-  supabase.from('vinculos').update({ ...payload, updated_at: nowUtcIso() }).eq('id', id).select(VINCULO_SELECT_COLUMNS).single(),
-  'vinculos.update'
-);
+export async function createVinculo(payload) {
+  await assertNoDuplicateActiveVinculo(payload);
+  return runQuery(
+    supabase.from('vinculos').insert({ ...payload, created_at: payload.created_at || nowUtcIso() }).select(VINCULO_SELECT_COLUMNS).single(),
+    'vinculos.create'
+  );
+}
+
+export async function updateVinculo(id, payload) {
+  await assertNoDuplicateActiveVinculo(payload, id);
+  return runQuery(
+    supabase.from('vinculos').update({ ...payload, updated_at: nowUtcIso() }).eq('id', id).select(VINCULO_SELECT_COLUMNS).single(),
+    'vinculos.update'
+  );
+}
 
 export const deleteVinculo = (id) => runQuery(supabase.from('vinculos').delete().eq('id', id), 'vinculos.delete');
 

@@ -29,3 +29,12 @@ export const upsertProfile = async (payload) => {
     'profiles.upsert'
   );
 };
+
+
+export async function hasUsuarioDependencies(userId) {
+  const vinculos = await runQuery(
+    supabase.from('vinculos').select('id').eq('user_id', userId).limit(1),
+    'profiles.dep.vinculos'
+  );
+  return (vinculos?.length || 0) > 0;
+}

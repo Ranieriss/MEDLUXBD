@@ -1,9 +1,11 @@
-const TOAST_DEDUPE_WINDOW_MS = 2000;
+import { nowUnixMs } from './shared_datetime.js';
+
+const TOAST_DEDUPE_WINDOW_MS = 1800;
 let lastToastMessage = '';
 let lastToastAt = 0;
 
 export function toast(message, type = 'info') {
-  const now = Date.now();
+  const now = nowUnixMs();
   if (message === lastToastMessage && now - lastToastAt < TOAST_DEDUPE_WINDOW_MS) {
     return;
   }
@@ -41,6 +43,25 @@ export function closeModal(onClose) {
 
 export function confirmDialog(msg) {
   return window.confirm(msg);
+}
+
+export function confirmDestructiveModal(message, confirmationWord = 'EXCLUIR') {
+  return new Promise((resolve) => {
+    const body = document.createElement('div');
+    body.innerHTML = `<p>${escapeHtml(message)}</p><input id="confirm-word" placeholder="Digite ${confirmationWord}" /><div class="row" style="margin-top:.7rem;"><button id="confirm-ok" class="danger">Confirmar</button><button id="confirm-cancel" class="secondary">Cancelar</button></div>`;
+    openModal('Confirmação de segurança', body, () => resolve(false));
+    body.querySelector('#confirm-cancel').onclick = () => {
+      closeModal();
+      resolve(false);
+    };
+    body.querySelector('#confirm-ok').onclick = () => {
+      const typed = body.querySelector('#confirm-word').value;
+      const ok = typed === confirmationWord;
+      if (!ok) return toast(`Digite ${confirmationWord} para continuar.`, 'error');
+      closeModal();
+      resolve(true);
+    };
+  });
 }
 
 export function escapeHtml(value = '') {

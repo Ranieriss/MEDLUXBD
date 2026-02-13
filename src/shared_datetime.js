@@ -3,6 +3,8 @@ const BR_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
   timeStyle: 'medium'
 });
 
+const MS_PER_DAY = 86400000;
+
 export function nowUtcIso() {
   return new Date().toISOString();
 }
@@ -39,4 +41,16 @@ export function formatLocalBrSafe(value) {
 
 export function formatDateTime(value) {
   return formatLocalBrSafe(value);
+}
+
+export function nowUnixMs() {
+  return Date.now();
+}
+
+export function daysSinceIso(value) {
+  const parsed = parseIsoSafe(value);
+  if (!parsed) return null;
+  return Math.floor((nowUnixMs() - parsed.getTime()) / MS_PER_DAY);
+}
+
 }

@@ -11,15 +11,27 @@ export async function listObras({ includeDeleted = false } = {}) {
     if (!includeDeleted) query = query.is('deleted_at', null);
     return await runQuery(query, 'obras.list');
   } catch (error) {
+    // 42703 = coluna não existe (schema legacy)
     if (String(error?.code) !== '42703') throw error;
-    return runQuery(supabase.from('obras').select(OBRA_LEGACY_COLUMNS).order('created_at', { ascending: false }), 'obras.listLegacy');
+    return runQuery(
+      supabase.from('obras').select(OBRA_LEGACY_COLUMNS).order('created_at', { ascending: false }),
+      'obras.listLegacy'
+    );
   }
 }
 
 export const createObra = async (payload) => {
   const organization_id = await getCurrentOrgId();
   return runQuery(
-    supabase.from('obras').insert({ ...payload, organization_id, created_at: payload.created_at || nowUtcIso() }).select(OBRA_SELECT_COLUMNS).single(),
+    supabase
+      .from('obras')
+      .insert({
+        ...payload,
+        organization_id,
+        created_at: payload.created_at || nowUtcIso()
+      })
+      .select(OBRA_SELECT_COLUMNS)
+      .single(),
     'obras.create'
   );
 };
@@ -27,20 +39,40 @@ export const createObra = async (payload) => {
 export const updateObra = async (id, payload) => {
   const organization_id = await getCurrentOrgId();
   return runQuery(
-    supabase.from('obras').update({ ...payload, organization_id, updated_at: nowUtcIso() }).eq('id', id).select(OBRA_SELECT_COLUMNS).single(),
+    supabase
+      .from('obras')
+      .update({
+        ...payload,
+        organization_id,
+        updated_at: nowUtcIso()
+      })
+      .eq('id', id)
+      .select(OBRA_SELECT_COLUMNS)
+      .single(),
     'obras.update'
   );
 };
 
 export const deleteObra = async (id) => {
   try {
+    // soft delete (preferido)
     return await runQuery(
-      supabase.from('obras').update({ status: 'INATIVA', deleted_at: nowUtcIso(), updated_at: nowUtcIso() }).eq('id', id),
+      supabase
+        .from('obras')
+        .update({ status: 'INATIVA', deleted_at: nowUtcIso(), updated_at: nowUtcIso() })
+        .eq('id', id),
       'obras.softDelete'
     );
   } catch (error) {
+    // 42703 = coluna deleted_at não existe (legacy)
     if (String(error?.code) !== '42703') throw error;
-    return runQuery(supabase.from('obras').update({ status: 'INATIVA', updated_at: nowUtcIso() }).eq('id', id), 'obras.softDeleteLegacy');
+    return runQuery(
+      supabase
+        .from('obras')
+        .update({ status: 'INATIVA', updated_at: nowUtcIso() })
+        .eq('id', id),
+      'obras.softDeleteLegacy'
+    );
   }
 };
 
@@ -50,4 +82,6 @@ export async function hasObraDependencies(id) {
     runQuery(supabase.from('vinculos').select('id').eq('obra_id', id).limit(1), 'obras.dep.vinculos')
   ]);
   return (medicoes?.length || 0) > 0 || (vinculos?.length || 0) > 0;
+}
+
 }

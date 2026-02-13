@@ -1,7 +1,6 @@
 import { assertSupabaseConfig, handleAppError, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
-import { toast } from './ui.js';
 import { ensureProfileShape, getMyProfile, upsertProfile } from './api/profiles.js';
 import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
@@ -14,6 +13,7 @@ import { renderUpdatePassword } from './pages/updatePassword.js';
 import { cleanAuthParamsFromUrl, hasRecoveryParams } from './auth/callback.js';
 import { APP_VERSION } from './version.js';
 import { createLogger } from './logger.js';
+import { handleGlobalError } from './errorHandling.js';
 
 const appLogger = createLogger('app');
 const links = [
@@ -41,7 +41,7 @@ function renderShell() {
   topbar.querySelector('#logout').onclick = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) addDiagnosticError(error, 'auth.logout');
-    setState({ session: null, user: null, profile: null, role: 'USER' });
+    setState({ session: null, user: null, profile: null, organization_id: null, role: 'USER' });
     addEvent({ type: 'logout', message: 'Logout realizado' });
     navigate('/login');
   };
@@ -49,27 +49,34 @@ function renderShell() {
 
 async function loadProfile() {
   if (!state.user?.id) return;
+  const metadataOrgId = state.user?.user_metadata?.organization_id || null;
   let profile = await getMyProfile(state.user.id);
   if (!profile) {
     profile = await upsertProfile({
       id: state.user.id,
       role: 'USER',
       email: state.user.email,
-      nome: (state.user.email || '').split('@')[0] || 'Usuário'
+      nome: (state.user.email || '').split('@')[0] || 'Usuário',
+      organization_id: metadataOrgId
     });
   }
 
   const completeProfile = ensureProfileShape(profile, {
     id: state.user.id,
     email: state.user.email,
-    role: 'USER'
+    role: 'USER',
+    organization_id: metadataOrgId
   });
 
   if (!profile?.nome || !profile?.email || !profile?.role) {
     await upsertProfile(completeProfile);
   }
 
-  setState({ profile: completeProfile, role: completeProfile.role || 'USER' });
+  setState({
+    profile: completeProfile,
+    organization_id: completeProfile.organization_id || metadataOrgId || null,
+    role: completeProfile.role || 'USER'
+  });
 }
 
 registerRoute('/login', renderLogin);
@@ -93,14 +100,28 @@ setGuard(async (hash) => {
 subscribe(() => renderShell());
 
 window.addEventListener('error', (ev) => {
-  appLogger.error('window.error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno });
-  addDiagnosticError(ev.error || new Error(ev.message), 'window.error');
-  handleAppError(ev.error || new Error(ev.message), 'window.error');
+  appLogger.error('window.error', {
+    action: 'window.error',
+    details: {
+      message: ev.message,
+      source: ev.filename,
+      line: ev.lineno,
+      col: ev.colno
+    }
+  });
+  handleGlobalError(ev.error || new Error(ev.message), 'window.error');
 });
+
 window.addEventListener('unhandledrejection', (ev) => {
-  appLogger.error('unhandledrejection', { reason: ev.reason?.message || String(ev.reason) });
-  addDiagnosticError(ev.reason, 'unhandledrejection');
-  handleAppError(ev.reason || new Error('Falha não tratada'), 'unhandledrejection');
+  appLogger.error('unhandledrejection', {
+    action: 'window.unhandledrejection',
+    details: {
+      reason: ev.reason?.message || String(ev.reason)
+    }
+  });
+  handleGlobalError(ev.reason || new Error('Falha não tratada'), 'window.unhandledrejection');
+});
+
 });
 
 (async function boot() {
@@ -127,8 +148,7 @@ window.addEventListener('unhandledrejection', (ev) => {
     renderShell();
     handleRoute();
   } catch (err) {
-    addDiagnosticError(err, 'boot');
-    appLogger.error('boot failed', { message: err?.message });
-    toast(`Falha ao inicializar app: ${err.message}`, 'error');
+    appLogger.error('boot failed', { action: 'boot', details: { message: err?.message } });
+    await handleGlobalError(err, 'boot');
   }
 })();

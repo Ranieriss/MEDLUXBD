@@ -4,6 +4,7 @@ import { state } from '../state.js';
 import { escapeHtml } from '../ui.js';
 import { formatLocalBrSafe } from '../shared_datetime.js';
 import { APP_VERSION } from '../version.js';
+import { applyOrganizationFilter } from '../tenant.js';
 
 function formatError(err) {
   const friendly = getFriendlyDatabaseError(err.raw || err);
@@ -27,11 +28,14 @@ export async function renderAuditoria(view) {
   let auditRows = [];
   let auditMsg = '';
   try {
-    const { data, error } = await supabase
-      .from('audit_log')
-      .select(AUDIT_LOG_SELECT_COLUMNS)
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const { data, error } = await applyOrganizationFilter(
+      supabase
+        .from('audit_log')
+        .select(AUDIT_LOG_SELECT_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      'auditoria.list'
+    );
     if (error) throw error;
     auditRows = data || [];
   } catch (e) {

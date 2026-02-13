@@ -1,7 +1,8 @@
 import { supabase } from './supabaseClient.js';
 import { state } from './state.js';
 import { nowUtcIso } from './shared_datetime.js';
-import { getCurrentOrgId } from './api/org.js';
+import { APP_VERSION } from './version.js';
+import { pageCorrelationId } from './logger.js';
 
 function sanitizeDetails(details = {}) {
   const clone = { ...details };
@@ -10,22 +11,33 @@ function sanitizeDetails(details = {}) {
   return clone;
 }
 
-export async function tryAuditLog({ action, entity, entityId = null, severity = 'INFO', details = {}, before = null, after = null }) {
-  const organization_id = await getCurrentOrgId();
+export async function tryAuditLog({
+  action,
+  entity,
+  entityId = null,
+  severity = 'INFO',
+  details = {},
+  before = null,
+  after = null,
+  route = window.location.hash.replace('#', '') || '/'
+}) {
   const payload = {
     user_id: state.user?.id || null,
-    organization_id,
+    // Single-tenant: não depende disso (DB pode preencher), mas se existir ajuda para rastreio
+    organization_id: state.profile?.organization_id || state.organization_id || null,
     action: `${action}:${entity}`,
     created_at: nowUtcIso(),
+    user_ref: state.user?.id || null,
     payload: {
       entity,
       entity_id: entityId,
       severity,
-      details: {
-        ...sanitizeDetails(details),
-        before: sanitizeDetails(before || {}),
-        after: sanitizeDetails(after || {})
-      }
+      route,
+      app_version: APP_VERSION,
+      correlation_id: pageCorrelationId,
+      details: sanitizeDetails(details),
+      before: before ? sanitizeDetails(before) : null,
+      after: after ? sanitizeDetails(after) : null
     }
   };
 
@@ -38,3 +50,4 @@ export async function tryAuditLog({ action, entity, entityId = null, severity = 
     return false;
   }
 }
+

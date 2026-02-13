@@ -3,14 +3,14 @@ import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { uploadTermo } from '../api/storage.js';
 import { state } from '../state.js';
-import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml, confirmDestructiveModal } from '../ui.js';
 import { toFriendlyErrorMessage } from '../supabaseClient.js';
-import { formatLocalBrSafe, localInputToUtcIso, toInputDateTimeLocal } from '../shared_datetime.js';
+import { formatLocalBrSafe, localInputToUtcIso, toInputDateTimeLocal, daysSinceIso } from '../shared_datetime.js';
 import { validateVinculo } from '../validators.js';
 import { tryAuditLog } from '../audit.js';
 
 const getEntregaBase = (item) => item.inicio_em || item.created_at;
-const daysWithUser = (date) => date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : '-';
+const daysWithUser = (date) => { const days = daysSinceIso(date); return days === null ? '-' : days; };
 
 function vinculoForm({ item = {}, equipamentos = [], obras = [] }) {
   const wrap = document.createElement('div');
@@ -79,8 +79,22 @@ export async function renderVinculos(view) {
           payload.termo_nome = file.name;
         }
         delete payload.termo;
-        const saved = item ? await updateVinculo(item.id, payload) : await createVinculo(payload);
-        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'vinculos', entityId: saved?.id || item?.id || null, details: { equipamento_id: payload.equipamento_id, status: payload.status }, before: item || null, after: saved || payload });
+        const saved = item
+          ? await updateVinculo(item.id, payload)
+          : await createVinculo(payload);
+
+        await tryAuditLog({
+          action: item ? 'UPDATE' : 'CREATE',
+          entity: 'vinculos',
+          entityId: saved?.id || item?.id || null,
+          details: {
+            equipamento_id: payload.equipamento_id,
+            status: payload.status
+          },
+          before: item || null,
+          after: saved || payload
+        });
+
         closeModal();
         toast('Vínculo salvo');
         renderVinculos(view);
@@ -110,8 +124,9 @@ export async function renderVinculos(view) {
   });
   view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     try {
-      const typed = window.prompt('Confirmação forte: digite DELETE para remover vínculo.');
-      if (typed !== 'DELETE') return;
+      const confirmed = await confirmDestructiveModal('Confirme a inativação do vínculo.');
+      if (!confirmed) return;
+
       await deleteVinculo(b.dataset.del);
       await tryAuditLog({ action: 'DELETE', entity: 'vinculos', entityId: b.dataset.del, details: { mode: 'soft_delete' }, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set' } });
       renderVinculos(view);

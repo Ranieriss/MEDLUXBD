@@ -1,6 +1,6 @@
 import { createEquipamento, deleteEquipamento, hasEquipamentoDependencies, listEquipamentos, updateEquipamento } from '../api/equipamentos.js';
 import { state } from '../state.js';
-import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml, confirmDestructiveModal } from '../ui.js';
 import { validateEquipamento } from '../validators.js';
 import { tryAuditLog } from '../audit.js';
 import { createLogger } from '../logger.js';
@@ -61,12 +61,13 @@ export async function renderEquipamentos(view) {
     view.querySelector('#novo').onclick = () => showModal();
     view.querySelectorAll('[data-edit]').forEach((btn) => btn.onclick = () => showModal(items.find((i) => i.id === btn.dataset.edit)));
     view.querySelectorAll('[data-del]').forEach((btn) => btn.onclick = async () => {
-      const typed = window.prompt('Confirmação forte: digite DELETE para inativar.');
-      if (typed !== 'DELETE') return;
-      if (await hasEquipamentoDependencies(btn.dataset.del)) return toast('Bloqueado: equipamento possui vínculos ou medições.', 'error');
+      const confirmed = await confirmDestructiveModal('Confirme a inativação do equipamento.');
+      if (!confirmed) return;
+      if (await hasEquipamentoDependencies(btn.dataset.del)) return toast('Bloqueado: equipamento possui vínculos ativos ou medições.', 'error');
+
       await deleteEquipamento(btn.dataset.del);
-      await tryAuditLog({ action: 'DELETE', entity: 'equipamentos', entityId: btn.dataset.del, details: { mode: 'soft_delete' } });
-      logger.warn('equipamento inativado', { id: btn.dataset.del });
+      await tryAuditLog({ action: 'DELETE', entity: 'equipamentos', entityId: btn.dataset.del, severity: 'WARN', details: { mode: 'soft_delete' } });
+      logger.warn('equipamento inativado', { entity: 'equipamentos', details: { id: btn.dataset.del } });
       toast('Equipamento inativado');
       return renderEquipamentos(view);
     });
@@ -85,8 +86,19 @@ export async function renderEquipamentos(view) {
         await tryAuditLog({ action: 'ERROR', entity: 'equipamentos.validation', severity: 'WARN', details: { message: validationError } });
         return toast(validationError, 'error');
       }
-      const saved = item ? await updateEquipamento(item.id, payload) : await createEquipamento(payload);
-      await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'equipamentos', entityId: saved?.id || item?.id || null, details: { codigo: payload.codigo, status: payload.status }, before: item || null, after: saved || payload });
+      const saved = item
+        ? await updateEquipamento(item.id, payload)
+        : await createEquipamento(payload);
+
+      await tryAuditLog({
+        action: item ? 'UPDATE' : 'CREATE',
+        entity: 'equipamentos',
+        entityId: saved?.id || item?.id || null,
+        details: { codigo: payload.codigo, status: payload.status },
+        before: item || null,
+        after: saved || payload
+      });
+
       closeModal();
       toast('Salvo com sucesso');
       renderEquipamentos(view);

@@ -25,7 +25,15 @@ function getEmailPrefillFromUrl() {
   return query.get('email') || hash.get('email') || '';
 }
 
-function navigateToLogin(email = '') {
+async function navigateToLogin(email = '') {
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    addDiagnosticError(error, 'auth.recovery.signOutToLogin');
+  }
+
+  setState({ session: null, user: null, profile: null, role: 'USER' });
   const emailQuery = email ? `?email=${encodeURIComponent(email)}` : '';
   navigate(`/login${emailQuery}`);
 }
@@ -77,8 +85,8 @@ export async function renderUpdatePassword(view) {
     requestLinkButton.style.display = 'none';
   };
 
-  backButton.addEventListener('click', () => navigateToLogin(emailPrefill));
-  requestLinkButton.addEventListener('click', () => navigateToLogin(emailPrefill));
+  backButton.addEventListener('click', async () => navigateToLogin(emailPrefill));
+  requestLinkButton.addEventListener('click', async () => navigateToLogin(emailPrefill));
 
   formEl.addEventListener('submit', async (event) => {
     event.preventDefault();

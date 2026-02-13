@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient.js';
 import { state } from './state.js';
 import { nowUtcIso } from './shared_datetime.js';
+import { APP_VERSION } from './version.js';
+import { pageCorrelationId } from './logger.js';
 
 function sanitizeDetails(details = {}) {
   const clone = { ...details };
@@ -9,7 +11,16 @@ function sanitizeDetails(details = {}) {
   return clone;
 }
 
-export async function tryAuditLog({ action, entity, entityId = null, severity = 'INFO', details = {} }) {
+export async function tryAuditLog({
+  action,
+  entity,
+  entityId = null,
+  severity = 'INFO',
+  details = {},
+  before = null,
+  after = null,
+  route = window.location.hash.replace('#', '') || '/'
+}) {
   const payload = {
     user_id: state.user?.id || null,
     action: `${action}:${entity}`,
@@ -18,7 +29,12 @@ export async function tryAuditLog({ action, entity, entityId = null, severity = 
       entity,
       entity_id: entityId,
       severity,
-      details: sanitizeDetails(details)
+      route,
+      app_version: APP_VERSION,
+      correlation_id: pageCorrelationId,
+      details: sanitizeDetails(details),
+      before: before ? sanitizeDetails(before) : null,
+      after: after ? sanitizeDetails(after) : null
     }
   };
 

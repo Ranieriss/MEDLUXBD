@@ -42,6 +42,12 @@ export function getFriendlyDatabaseError(error) {
 export function toFriendlyErrorMessage(error, fallback = 'Ocorreu um erro inesperado.') {
   const dbMessage = getFriendlyDatabaseError(error);
   if (dbMessage) return dbMessage;
+  const status = Number(error?.status || 0);
+  const message = String(error?.message || error || '').toLowerCase();
+  if (status === 401) return 'Sessão expirada. Faça login novamente.';
+  if (status === 403) return 'Acesso negado para esta operação.';
+  if (message.includes('tempo limite') || message.includes('timeout')) return 'A requisição demorou demais. Tente novamente.';
+  if (message.includes('failed to fetch') || message.includes('network')) return 'Falha de rede. Verifique sua conexão.';
   if (typeof error === 'string') return error;
   if (error?.message) return error.message;
   return fallback;

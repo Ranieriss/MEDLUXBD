@@ -1,5 +1,5 @@
 import { addDiagnosticError, state } from './state.js';
-import { toFriendlyErrorMessage } from './supabaseClient.js';
+import { supabase, toFriendlyErrorMessage } from './supabaseClient.js';
 import { toast } from './ui.js';
 
 const routes = new Map();
@@ -38,27 +38,51 @@ export async function safeLoad(fn, context = 'router.safeLoad') {
   }
 }
 
-function resolveHashRoute() {
+function hasRecoveryIndicators({ hashValue, searchValue, hashRoute, searchParams }) {
+  const hashHasRecoveryType = hashValue.includes('type=recovery');
+  const hashHasAccessToken = hashValue.includes('access_token=');
+  const searchHasRecoveryType = searchValue.includes('type=recovery');
+  const hasCode = searchParams.has('code');
+  const routeSuggestsRecovery = hashRoute === '/update-password' || hashRoute === '/reset-password';
+  const codeWithRecoveryHint = hasCode && (searchHasRecoveryType || hashHasRecoveryType || routeSuggestsRecovery);
+
+  return {
+    isRecovery: hashHasRecoveryType || hashHasAccessToken || searchHasRecoveryType || codeWithRecoveryHint,
+    hasCode
+  };
+}
+
+async function resolveHashRoute() {
   const rawHash = window.location.hash.replace('#', '') || '/dashboard';
+  const rawSearch = window.location.search || '';
   const searchParams = new URLSearchParams(window.location.search);
   const hashRoute = rawHash.split('?')[0].split('#')[0] || '/dashboard';
-  const hashLooksLikeRecoveryToken = rawHash.startsWith('access_token=') || rawHash.includes('type=recovery');
-  const hasRecoveryCode = searchParams.has('code');
+  const { isRecovery, hasCode } = hasRecoveryIndicators({
+    hashValue: rawHash,
+    searchValue: rawSearch,
+    hashRoute,
+    searchParams
+  });
 
-  if (hashRoute === '/update-password' || hashRoute === '/reset-password' || hashLooksLikeRecoveryToken) {
-    return '/reset-password';
+  if (hasCode && !consumedInitialCodeParam) {
+    consumedInitialCodeParam = true;
+    const code = searchParams.get('code');
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+    }
+    return isRecovery ? '/update-password' : '/dashboard';
   }
 
-  if (hasRecoveryCode && !consumedInitialCodeParam) {
-    consumedInitialCodeParam = true;
-    return '/reset-password';
+  if (isRecovery || hashRoute === '/update-password' || hashRoute === '/reset-password') {
+    return '/update-password';
   }
 
   return hashRoute;
 }
 
 export async function handleRoute() {
-  const hash = resolveHashRoute();
+  const hash = await resolveHashRoute();
   try {
     if (beforeEach) {
       const redirect = await beforeEach(hash, state);

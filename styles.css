@@ -53,3 +53,6 @@ th, td { border-bottom:1px solid var(--border); text-align:left; padding:.55rem;
   .sidebar, .topbar, .row, button { display:none !important; }
   .panel { border:none; }
 }
+
+.app-footer { padding: .6rem 1rem; color: var(--muted); border-top: 1px solid var(--border); font-size: .85rem; }
+.error-details summary{cursor:pointer;}

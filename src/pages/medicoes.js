@@ -1,9 +1,12 @@
-import { createMedicao, deleteMedicao, listMedicoes, updateMedicao } from '../api/medicoes.js';
+import { canCreateMedicao, createMedicao, deleteMedicao, listMedicoes, updateMedicao } from '../api/medicoes.js';
 import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { state } from '../state.js';
-import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
 import { toFriendlyErrorMessage } from '../supabaseClient.js';
+import { formatLocalBrSafe, localInputToUtcIso, toInputDateTimeLocal } from '../shared_datetime.js';
+import { validateMedicao } from '../validators.js';
+import { tryAuditLog } from '../audit.js';
 
 function formMedicao({ item = {}, equipamentos = [], obras = [] }) {
   const wrap = document.createElement('div');
@@ -15,8 +18,9 @@ function formMedicao({ item = {}, equipamentos = [], obras = [] }) {
       <input name="tipo" placeholder="Tipo" value="${escapeHtml(item.tipo || '')}" required />
       <input name="valor" type="number" step="0.01" placeholder="Valor" value="${escapeHtml(item.valor || '')}" required />
       <input name="unidade" placeholder="Unidade" value="${escapeHtml(item.unidade || '')}" required />
+      <input name="data" type="date" value="${escapeHtml(item.data || '')}" required />
       <select name="conforme"><option value="true" ${item.conforme ? 'selected' : ''}>Conforme</option><option value="false" ${item.conforme === false ? 'selected' : ''}>Não conforme</option></select>
-      <input type="datetime-local" name="medido_em" value="${escapeHtml((item.medido_em || '').slice(0, 16))}" required />
+      <input type="datetime-local" name="medido_em" value="${escapeHtml(toInputDateTimeLocal(item.medido_em || ''))}" required />
     </div>
     <textarea name="observacoes" placeholder="Observações">${escapeHtml(item.observacoes || '')}</textarea>
     <div class="row" style="margin-top:.7rem;"><button type="button" id="save-m">Salvar</button></div>
@@ -43,7 +47,7 @@ export async function renderMedicoes(view) {
     items = await listMedicoes(filters);
     view.innerHTML = `<div class="panel"><div class="row"><h2>Medições</h2><select id="f-obra"><option value="">Todas obras</option>${obras.map(o=>`<option value="${o.id}" ${filters.obra_id===o.id?'selected':''}>${escapeHtml(o.codigo)}</option>`).join('')}</select><select id="f-eq"><option value="">Todos equipamentos</option>${equipamentos.map(e=>`<option value="${e.id}" ${filters.equipamento_id===e.id?'selected':''}>${escapeHtml(e.codigo)}</option>`).join('')}</select><button id="novo" class="small">Novo</button></div>
       <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Valor</th><th>Conforme</th><th>Medição em</th><th>Ações</th></tr></thead><tbody>
-      ${items.map(i => `<tr><td>${escapeHtml(i.tipo)}</td><td>${escapeHtml(i.valor)} ${escapeHtml(i.unidade)}</td><td>${i.conforme ? 'Sim' : 'Não'}</td><td>${escapeHtml(i.medido_em || '')}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small secondary" data-pdf="${i.id}">Gerar PDF individual</button><button class="small danger" data-del="${i.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="5">Sem medições</td></tr>'}
+      ${items.map(i => `<tr><td>${escapeHtml(i.tipo)}</td><td>${escapeHtml(i.valor)} ${escapeHtml(i.unidade)}</td><td>${i.conforme ? 'Sim' : 'Não'}</td><td>${escapeHtml(formatLocalBrSafe(i.medido_em || ''))}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small secondary" data-pdf="${i.id}">Gerar PDF individual</button><button class="small danger" data-del="${i.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="5">Sem medições</td></tr>'}
       </tbody></table></div></div>`;
 
     view.querySelector('#f-obra').onchange = (e) => { filters.obra_id = e.target.value || undefined; redraw(); };
@@ -51,7 +55,11 @@ export async function renderMedicoes(view) {
     view.querySelector('#novo').onclick = () => openEditor();
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find(i => i.id === b.dataset.edit)));
     view.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = () => printMedicao(items.find(i => i.id === b.dataset.pdf)));
-    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { if (!confirmDialog('Excluir medição?')) return; try { await deleteMedicao(b.dataset.del); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
+    view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+      const typed = window.prompt('Confirmação forte: digite EXCLUIR para remover medição.');
+      if (typed !== 'EXCLUIR') return;
+      try { await deleteMedicao(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'medicoes', entityId: b.dataset.del }); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
+    });
   };
 
   const openEditor = (item = null) => {
@@ -59,12 +67,18 @@ export async function renderMedicoes(view) {
     openModal(item ? 'Editar medição' : 'Nova medição', content);
     content.querySelector('#save-m').onclick = async () => {
       const payload = Object.fromEntries(new FormData(content.querySelector('form')).entries());
-      if (!payload.equipamento_id || !payload.obra_id || !payload.user_id || !payload.tipo || !payload.valor || !payload.unidade || !payload.medido_em) {
-        return toast('Preencha todos os campos obrigatórios', 'error');
-      }
+      payload.medido_em = localInputToUtcIso(payload.medido_em);
       payload.conforme = payload.conforme === 'true';
+      const validationError = validateMedicao(payload);
+      if (validationError) {
+        await tryAuditLog({ action: 'ERROR', entity: 'medicoes.validation', severity: 'WARN', details: { message: validationError } });
+        return toast(validationError, 'error');
+      }
+      const allowed = await canCreateMedicao({ equipamento_id: payload.equipamento_id, user_id: payload.user_id });
+      if (!allowed) return toast('Regra de segurança: usuário não vinculado ao equipamento para registrar medição.', 'error');
       try {
         if (item) await updateMedicao(item.id, payload); else await createMedicao(payload);
+        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'medicoes', entityId: item?.id || null, details: { equipamento_id: payload.equipamento_id, tipo: payload.tipo } });
         closeModal();
         redraw();
         toast('Medição salva');

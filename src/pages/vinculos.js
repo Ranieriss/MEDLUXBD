@@ -1,10 +1,13 @@
-import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, listVinculos, updateVinculo } from '../api/vinculos.js';
+import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, hasActiveVinculoByEquipamento, listVinculos, updateVinculo } from '../api/vinculos.js';
 import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { uploadTermo } from '../api/storage.js';
 import { state } from '../state.js';
-import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
 import { toFriendlyErrorMessage } from '../supabaseClient.js';
+import { formatLocalBrSafe, localInputToUtcIso, toInputDateTimeLocal } from '../shared_datetime.js';
+import { validateVinculo } from '../validators.js';
+import { tryAuditLog } from '../audit.js';
 
 const getEntregaBase = (item) => item.inicio_em || item.created_at;
 const daysWithUser = (date) => date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : '-';
@@ -16,7 +19,7 @@ function vinculoForm({ item = {}, equipamentos = [], obras = [] }) {
       <select name="equipamento_id" required><option value="">Equipamento</option>${equipamentos.map((e) => `<option value="${e.id}" ${item.equipamento_id === e.id ? 'selected' : ''}>${escapeHtml(e.codigo)} - ${escapeHtml(e.nome || '')}</option>`).join('')}</select>
       <select name="obra_id"><option value="">Obra</option>${obras.map((o) => `<option value="${o.id}" ${item.obra_id === o.id ? 'selected' : ''}>${escapeHtml(o.codigo)} - ${escapeHtml(o.nome || '')}</option>`).join('')}</select>
       <input name="user_id" placeholder="user_id" value="${escapeHtml(item.user_id || state.user.id)}" required />
-      <input type="datetime-local" name="inicio_em" value="${escapeHtml((item.inicio_em || '').slice(0, 16))}" required />
+      <input type="datetime-local" name="inicio_em" value="${escapeHtml(toInputDateTimeLocal(item.inicio_em || ''))}" required />
       <input name="status" placeholder="Status" value="${escapeHtml(item.status || 'ATIVO')}" />
       <input type="file" name="termo" />
     </div>
@@ -40,7 +43,7 @@ export async function renderVinculos(view) {
       <td>${escapeHtml(i.equipamento?.codigo || eqMap[i.equipamento_id]?.codigo || i.equipamento_id)}</td>
       <td>${escapeHtml(i.obra?.codigo || obMap[i.obra_id]?.codigo || i.obra_id || '-')}</td>
       <td>${escapeHtml(i.user_id)}</td>
-      <td>${escapeHtml(entrega || '')}</td>
+      <td>${escapeHtml(formatLocalBrSafe(entrega || ''))}</td>
       <td>${daysWithUser(entrega)}</td>
       <td>${i.termo_url ? `<button class='small secondary' data-arq='${i.id}'>Abrir</button>` : '-'}</td>
       <td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small" data-end="${i.id}">Encerrar</button><button class="small danger" data-del="${i.id}">Excluir</button></td>
@@ -56,8 +59,15 @@ export async function renderVinculos(view) {
         const form = content.querySelector('form');
         const fd = new FormData(form);
         const payload = Object.fromEntries(fd.entries());
-        if (!payload.equipamento_id || !payload.user_id || !payload.inicio_em) {
-          return toast('Campos obrigatórios: equipamento, user_id, início', 'error');
+        payload.status = String(payload.status || '').toUpperCase();
+        payload.inicio_em = localInputToUtcIso(payload.inicio_em);
+        const validationError = validateVinculo(payload);
+        if (validationError) {
+          await tryAuditLog({ action: 'ERROR', entity: 'vinculos.validation', severity: 'WARN', details: { message: validationError } });
+          return toast(validationError, 'error');
+        }
+        if (!item && await hasActiveVinculoByEquipamento(payload.equipamento_id)) {
+          return toast('Já existe vínculo ATIVO para este equipamento.', 'error');
         }
         if (!payload.obra_id) delete payload.obra_id;
         const file = form.querySelector('input[name="termo"]').files[0];
@@ -69,6 +79,7 @@ export async function renderVinculos(view) {
         }
         delete payload.termo;
         if (item) await updateVinculo(item.id, payload); else await createVinculo(payload);
+        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'vinculos', entityId: item?.id || null, details: { equipamento_id: payload.equipamento_id, status: payload.status } });
         closeModal();
         toast('Vínculo salvo');
         renderVinculos(view);
@@ -80,8 +91,24 @@ export async function renderVinculos(view) {
 
   view.querySelector('#novo').onclick = () => openEditor();
   view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find((i) => i.id === b.dataset.edit)));
-  view.querySelectorAll('[data-end]').forEach((b) => b.onclick = async () => { try { await encerrarVinculo(b.dataset.end); toast('Vínculo encerrado'); renderVinculos(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
-  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => { try { if (!confirmDialog('Excluir vínculo?')) return; await deleteVinculo(b.dataset.del); renderVinculos(view); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); } });
+  view.querySelectorAll('[data-end]').forEach((b) => b.onclick = async () => {
+    try {
+      const motivo = window.prompt('Motivo do encerramento (opcional):') || '';
+      await encerrarVinculo(b.dataset.end, motivo);
+      await tryAuditLog({ action: 'ENCERRAR', entity: 'vinculos', entityId: b.dataset.end, details: { motivo } });
+      toast('Vínculo encerrado');
+      renderVinculos(view);
+    } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
+  });
+  view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    try {
+      const typed = window.prompt('Confirmação forte: digite EXCLUIR para remover vínculo.');
+      if (typed !== 'EXCLUIR') return;
+      await deleteVinculo(b.dataset.del);
+      await tryAuditLog({ action: 'DELETE', entity: 'vinculos', entityId: b.dataset.del, details: { mode: 'hard_delete' } });
+      renderVinculos(view);
+    } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
+  });
   view.querySelectorAll('[data-arq]').forEach((b) => b.onclick = async () => {
     const item = items.find((i) => i.id === b.dataset.arq);
     if (!item?.termo_url) return;

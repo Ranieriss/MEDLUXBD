@@ -6,7 +6,10 @@ import {
 } from './config.js';
 import { addDiagnosticError } from './state.js';
 import { toast } from './ui.js';
+import { createLogger } from './logger.js';
+import { tryAuditLog } from './audit.js';
 
+const clientLogger = createLogger('supabase');
 const configErrorMessage = validateSupabaseConfig();
 if (configErrorMessage) {
   toast(configErrorMessage, 'error');
@@ -27,7 +30,7 @@ const EMAIL_AUTH_DISABLED_GUIDANCE =
 
 const DATABASE_ERROR_MESSAGES = {
   '23502': 'Campo obrigatório não preenchido',
-  '42703': 'Coluna não existe'
+  '42703': 'Seu frontend está pedindo uma coluna que não existe no banco. Verifique versão do schema.'
 };
 
 export function getFriendlyDatabaseError(error) {
@@ -71,7 +74,8 @@ export function getSupabaseErrorMessage(error) {
 }
 
 export function logSupabaseAuthError(error, context = 'auth') {
-  console.error(`[${context}] Supabase auth error`, {
+  clientLogger.error('Supabase auth error', {
+    context,
     error,
     status: error?.status ?? null,
     code: error?.code ?? null,
@@ -79,12 +83,13 @@ export function logSupabaseAuthError(error, context = 'auth') {
   });
 }
 
-
 export function logSupabaseRestError(error, context = 'rest') {
-  const status = error?.status ?? null;
-  const code = error?.code ?? null;
-  const message = error?.message ?? String(error);
-  console.error(`[${context}] Supabase REST error`, { status, code, message, error });
+  clientLogger.error('Supabase REST error', {
+    context,
+    status: error?.status ?? null,
+    code: error?.code ?? null,
+    message: error?.message ?? String(error)
+  });
 }
 
 export function assertSupabaseConfig() {
@@ -95,15 +100,29 @@ export function assertSupabaseConfig() {
   }
 }
 
-export async function runQuery(promise, context = 'api') {
+async function withTimeout(queryPromise, timeoutMs = 12000) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Tempo limite excedido (${timeoutMs}ms)`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([queryPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function runQuery(promise, context = 'api', meta = {}) {
   assertSupabaseConfig();
   try {
-    const { data, error } = await promise;
+    const { data, error } = await withTimeout(promise);
     if (error) throw error;
     return data;
   } catch (error) {
     logSupabaseRestError(error, context);
     addDiagnosticError(error, context);
+    await tryAuditLog({ action: 'ERROR', entity: context, severity: 'ERROR', details: { ...meta, message: error?.message, status: error?.status, code: error?.code } });
     throw error;
   }
 }

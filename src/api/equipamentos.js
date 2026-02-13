@@ -1,7 +1,7 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 import { isAdmin, state } from '../state.js';
 
-const EQUIPAMENTO_COLUMNS = 'id,codigo,nome,modelo,status,user_id,created_at,updated_at';
+const EQUIPAMENTO_COLUMNS = 'id,codigo,nome,modelo,status,created_at';
 
 async function listEquipamentosFromIds(ids) {
   return runQuery(

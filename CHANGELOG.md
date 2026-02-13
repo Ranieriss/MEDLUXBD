@@ -12,6 +12,9 @@
 - Proteção contra exclusão indevida com confirmação forte e soft delete para equipamentos/obras.
 - UI de erro global aprimorada com recarregar/voltar dashboard e detalhes técnicos para ADMIN.
 - Versionamento visível em UI e página de auditoria.
+- Enriquecimento multi-tenant no frontend com `getCurrentOrgId()` e escrita automática de `organization_id` em create/update/audit.
+- Soft delete padronizado para equipamentos/obras/vínculos/medições com fallback para schema legado.
+- Tratamento global de erros (401/403/400/42703/rede) com mensagem amigável e detalhes técnicos para ADMIN.
 
 ## Checklist manual de validação pós-release
 

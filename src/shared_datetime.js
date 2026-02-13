@@ -9,6 +9,10 @@ export function nowUtcIso() {
   return new Date().toISOString();
 }
 
+export function parseDateTime(value) {
+  return parseIsoSafe(value);
+}
+
 export function parseIsoSafe(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -35,6 +39,10 @@ export function formatLocalBrSafe(value) {
   return BR_FORMATTER.format(parsed);
 }
 
+export function formatDateTime(value) {
+  return formatLocalBrSafe(value);
+}
+
 export function nowUnixMs() {
   return Date.now();
 }
@@ -43,4 +51,6 @@ export function daysSinceIso(value) {
   const parsed = parseIsoSafe(value);
   if (!parsed) return null;
   return Math.floor((nowUnixMs() - parsed.getTime()) / MS_PER_DAY);
+}
+
 }

@@ -1,4 +1,4 @@
-import { assertSupabaseConfig, supabase } from './supabaseClient.js';
+import { assertSupabaseConfig, handleAppError, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
 import { ensureProfileShape, getMyProfile, upsertProfile } from './api/profiles.js';
@@ -100,12 +100,28 @@ setGuard(async (hash) => {
 subscribe(() => renderShell());
 
 window.addEventListener('error', (ev) => {
-  appLogger.error('window.error', { action: 'window.error', details: { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno } });
+  appLogger.error('window.error', {
+    action: 'window.error',
+    details: {
+      message: ev.message,
+      source: ev.filename,
+      line: ev.lineno,
+      col: ev.colno
+    }
+  });
   handleGlobalError(ev.error || new Error(ev.message), 'window.error');
 });
+
 window.addEventListener('unhandledrejection', (ev) => {
-  appLogger.error('unhandledrejection', { action: 'window.unhandledrejection', details: { reason: ev.reason?.message || String(ev.reason) } });
-  handleGlobalError(ev.reason, 'window.unhandledrejection');
+  appLogger.error('unhandledrejection', {
+    action: 'window.unhandledrejection',
+    details: {
+      reason: ev.reason?.message || String(ev.reason)
+    }
+  });
+  handleGlobalError(ev.reason || new Error('Falha não tratada'), 'window.unhandledrejection');
+});
+
 });
 
 (async function boot() {

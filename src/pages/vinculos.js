@@ -29,13 +29,14 @@ function vinculoForm({ item = {}, equipamentos = [], obras = [] }) {
 }
 
 export async function renderVinculos(view) {
-  const [items, equipamentos, obras] = await Promise.all([listVinculos(), listEquipamentos(), listObras()]);
+  let showDeleted = view.dataset.showDeleted === 'true';
+  const [items, equipamentos, obras] = await Promise.all([listVinculos({ includeDeleted: showDeleted && state.role === 'ADMIN' }), listEquipamentos(), listObras()]);
   state.cache.vinculos = items;
 
   const eqMap = Object.fromEntries(equipamentos.map((e) => [e.id, e]));
   const obMap = Object.fromEntries(obras.map((o) => [o.id, o]));
 
-  view.innerHTML = `<div class="panel"><div class="row"><h2>Vínculos</h2><button id="novo" class="small">Novo</button></div>
+  view.innerHTML = `<div class="panel"><div class="row"><h2>Vínculos</h2><button id="novo" class="small">Novo</button>${state.role === 'ADMIN' ? `<label class="muted"><input type="checkbox" id="toggle-deleted" ${showDeleted ? 'checked' : ''}/> Mostrar removidos</label>` : ''}</div>
     <div class="table-wrap"><table><thead><tr><th>Equipamento</th><th>Obra</th><th>User</th><th>Entrega</th><th>Dias c/ usuário</th><th>Termo</th><th>Ações</th></tr></thead><tbody>
     ${items.map((i) => {
       const entrega = getEntregaBase(i);
@@ -69,7 +70,7 @@ export async function renderVinculos(view) {
         if (!item && await hasActiveVinculoByEquipamento(payload.equipamento_id)) {
           return toast('Já existe vínculo ATIVO para este equipamento.', 'error');
         }
-        if (!payload.obra_id) delete payload.obra_id;
+        if (!payload.obra_id) return toast('obra_id é obrigatório para vínculo.', 'error');
         const file = form.querySelector('input[name="termo"]').files[0];
         if (file) {
           const obraCodigo = (obras.find((o) => o.id === payload.obra_id)?.codigo || 'obra').toString();
@@ -78,8 +79,22 @@ export async function renderVinculos(view) {
           payload.termo_nome = file.name;
         }
         delete payload.termo;
-        if (item) await updateVinculo(item.id, payload); else await createVinculo(payload);
-        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'vinculos', entityId: item?.id || null, before: item, after: payload, details: { equipamento_id: payload.equipamento_id, status: payload.status } });
+        const saved = item
+          ? await updateVinculo(item.id, payload)
+          : await createVinculo(payload);
+
+        await tryAuditLog({
+          action: item ? 'UPDATE' : 'CREATE',
+          entity: 'vinculos',
+          entityId: saved?.id || item?.id || null,
+          details: {
+            equipamento_id: payload.equipamento_id,
+            status: payload.status
+          },
+          before: item || null,
+          after: saved || payload
+        });
+
         closeModal();
         toast('Vínculo salvo');
         renderVinculos(view);
@@ -90,22 +105,30 @@ export async function renderVinculos(view) {
   };
 
   view.querySelector('#novo').onclick = () => openEditor();
+  const toggle = view.querySelector('#toggle-deleted');
+  if (toggle) {
+    toggle.onchange = async () => {
+      view.dataset.showDeleted = String(toggle.checked);
+      renderVinculos(view);
+    };
+  }
   view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find((i) => i.id === b.dataset.edit)));
   view.querySelectorAll('[data-end]').forEach((b) => b.onclick = async () => {
     try {
       const motivo = window.prompt('Motivo do encerramento (opcional):') || '';
       await encerrarVinculo(b.dataset.end, motivo);
-      await tryAuditLog({ action: 'ENCERRAR', entity: 'vinculos', entityId: b.dataset.end, details: { motivo } });
+      await tryAuditLog({ action: 'ENCERRAR', entity: 'vinculos', entityId: b.dataset.end, details: { motivo }, before: items.find((i) => i.id === b.dataset.end) || null, after: { status: 'ENCERRADO', motivo_encerramento: motivo } });
       toast('Vínculo encerrado');
       renderVinculos(view);
     } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
   });
   view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     try {
-      const confirmed = await confirmDestructiveModal('Confirme a remoção permanente do vínculo.');
+      const confirmed = await confirmDestructiveModal('Confirme a inativação do vínculo.');
       if (!confirmed) return;
+
       await deleteVinculo(b.dataset.del);
-      await tryAuditLog({ action: 'DELETE', entity: 'vinculos', entityId: b.dataset.del, details: { mode: 'hard_delete' } });
+      await tryAuditLog({ action: 'DELETE', entity: 'vinculos', entityId: b.dataset.del, details: { mode: 'soft_delete' }, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set' } });
       renderVinculos(view);
     } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
   });

@@ -1,6 +1,6 @@
-export const EQUIPAMENTO_SELECT_COLUMNS = 'id,codigo,nome,modelo,tipo,status,created_at,updated_at';
+export const EQUIPAMENTO_SELECT_COLUMNS = 'id,codigo,nome,modelo,tipo,status,organization_id,deleted_at,created_at,updated_at';
 
-export const OBRA_SELECT_COLUMNS = 'id,codigo,nome,local,status,created_at,updated_at';
+export const OBRA_SELECT_COLUMNS = 'id,codigo,nome,local,status,organization_id,deleted_at,created_at,updated_at';
 
 export const VINCULO_SELECT_COLUMNS = [
   'id',
@@ -16,6 +16,8 @@ export const VINCULO_SELECT_COLUMNS = [
   'encerrado_por',
   'created_at',
   'updated_at',
+  'organization_id',
+  'deleted_at',
   'equipamento:equipamentos!left(id,codigo,nome)',
   'obra:obras!left(id,codigo,nome)'
 ].join(',');
@@ -32,8 +34,10 @@ export const MEDICAO_SELECT_COLUMNS = [
   'data',
   'medido_em',
   'observacoes',
+  'organization_id',
+  'deleted_at',
   'created_at',
   'updated_at'
 ].join(',');
 
-export const AUDIT_LOG_SELECT_COLUMNS = 'id,created_at,user_id,action,payload';
+export const AUDIT_LOG_SELECT_COLUMNS = 'id,created_at,user_id,action,organization_id,payload';

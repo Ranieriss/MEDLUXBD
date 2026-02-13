@@ -14,15 +14,19 @@ export function navigate(path) {
   else handleRoute();
 }
 
-export function renderError(message = 'Erro inesperado.') {
+export function renderError(message = 'Erro inesperado.', technical = null) {
   const view = document.getElementById('view');
   if (!view) return;
 
-  view.innerHTML = `<div class="panel"><h2>Falha ao carregar página</h2><p class="muted">${message}</p><div class="row"><button id="go-dashboard" class="small">Ir para dashboard</button><button id="go-login" class="small secondary">Ir para login</button></div></div>`;
+  const adminDetails = state.role === 'ADMIN' && technical
+    ? `<details class="error-details"><summary>Detalhes técnicos</summary><pre>${JSON.stringify(technical, null, 2)}</pre></details>`
+    : '';
+
+  view.innerHTML = `<div class="panel"><h2>Falha ao carregar página</h2><p class="muted">${message}</p><div class="row"><button id="reload-page" class="small">Recarregar</button><button id="go-dashboard" class="small secondary">Voltar ao Dashboard</button></div>${adminDetails}</div>`;
   const dashboardButton = view.querySelector('#go-dashboard');
-  const loginButton = view.querySelector('#go-login');
+  const reloadButton = view.querySelector('#reload-page');
   if (dashboardButton) dashboardButton.onclick = () => navigate('/dashboard');
-  if (loginButton) loginButton.onclick = () => navigate('/login');
+  if (reloadButton) reloadButton.onclick = () => window.location.reload();
 }
 
 export async function safeLoad(fn, context = 'router.safeLoad') {
@@ -33,7 +37,7 @@ export async function safeLoad(fn, context = 'router.safeLoad') {
     addDiagnosticError(e, context);
     const message = toFriendlyErrorMessage(e, 'Não foi possível carregar os dados desta página.');
     toast(message, 'error');
-    renderError(message);
+    renderError(message, { context, endpoint: e?.url || null, status: e?.status || null, message: e?.message || String(e) });
     return false;
   }
 }
@@ -97,7 +101,7 @@ export async function handleRoute() {
     addDiagnosticError(error, `router.handleRoute:${hash}`);
     const message = toFriendlyErrorMessage(error, 'Erro ao abrir a página.');
     toast(message, 'error');
-    renderError(message);
+    renderError(message, { endpoint: error?.url || null, status: error?.status || null, message: error?.message || String(error) });
   }
 }
 

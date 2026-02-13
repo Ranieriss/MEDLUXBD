@@ -1,6 +1,11 @@
-import { createEquipamento, deleteEquipamento, listEquipamentos, updateEquipamento } from '../api/equipamentos.js';
+import { createEquipamento, deleteEquipamento, hasEquipamentoDependencies, listEquipamentos, updateEquipamento } from '../api/equipamentos.js';
 import { state } from '../state.js';
-import { closeModal, confirmDialog, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
+import { validateEquipamento } from '../validators.js';
+import { tryAuditLog } from '../audit.js';
+import { createLogger } from '../logger.js';
+
+const logger = createLogger('page.equipamentos');
 
 function formEquipamento(item = {}) {
   const wrap = document.createElement('div');
@@ -10,6 +15,7 @@ function formEquipamento(item = {}) {
         <input name="codigo" placeholder="Código" value="${escapeHtml(item.codigo || '')}" required />
         <input name="nome" placeholder="Nome" value="${escapeHtml(item.nome || '')}" required />
         <input name="modelo" placeholder="Modelo" value="${escapeHtml(item.modelo || '')}" />
+        <input name="tipo" placeholder="Tipo (OUTRO|LUXIMETRO...)" value="${escapeHtml(item.tipo || '')}" />
         <input name="status" placeholder="Status" value="${escapeHtml(item.status || 'ATIVO')}" />
       </div>
       <div class="row" style="margin-top:.7rem;"><button type="button" id="save-eq">Salvar</button></div>
@@ -26,7 +32,7 @@ export async function renderEquipamentos(view) {
     view.innerHTML = `<div class="panel">
       <div class="row"><h2>Equipamentos</h2><input id="busca" placeholder="Buscar" /><button id="novo" class="small">Novo</button></div>
       <div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Modelo</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>${filtered.map((i) => `<tr><td>${escapeHtml(i.codigo)}</td><td>${escapeHtml(i.nome)}</td><td>${escapeHtml(i.modelo || '')}</td><td>${escapeHtml(i.status || '')}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small danger" data-del="${i.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="5">Sem registros</td></tr>'}</tbody></table></div>
+      <tbody>${filtered.map((i) => `<tr><td>${escapeHtml(i.codigo)}</td><td>${escapeHtml(i.nome)}</td><td>${escapeHtml(i.modelo || '')}</td><td>${escapeHtml(i.status || '')}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small danger" data-del="${i.id}">Inativar</button></td></tr>`).join('') || '<tr><td colspan="5">Sem registros</td></tr>'}</tbody></table></div>
     </div>`;
     bind();
   };
@@ -41,9 +47,13 @@ export async function renderEquipamentos(view) {
     view.querySelector('#novo').onclick = () => showModal();
     view.querySelectorAll('[data-edit]').forEach((btn) => btn.onclick = () => showModal(items.find((i) => i.id === btn.dataset.edit)));
     view.querySelectorAll('[data-del]').forEach((btn) => btn.onclick = async () => {
-      if (!confirmDialog('Excluir equipamento?')) return;
+      const typed = window.prompt('Confirmação forte: digite EXCLUIR para inativar.');
+      if (typed !== 'EXCLUIR') return;
+      if (await hasEquipamentoDependencies(btn.dataset.del)) return toast('Bloqueado: equipamento possui vínculos ou medições.', 'error');
       await deleteEquipamento(btn.dataset.del);
-      toast('Excluído');
+      await tryAuditLog({ action: 'DELETE', entity: 'equipamentos', entityId: btn.dataset.del, details: { mode: 'soft_delete' } });
+      logger.warn('equipamento inativado', { id: btn.dataset.del });
+      toast('Equipamento inativado');
       return renderEquipamentos(view);
     });
   };
@@ -53,8 +63,16 @@ export async function renderEquipamentos(view) {
     openModal(item ? 'Editar equipamento' : 'Novo equipamento', form);
     form.querySelector('#save-eq').onclick = async () => {
       const payload = Object.fromEntries(new FormData(form.querySelector('form')).entries());
-      if (!payload.codigo || !payload.nome) return toast('Código e nome obrigatórios', 'error');
+      payload.status = String(payload.status || '').toUpperCase();
+      payload.tipo = String(payload.tipo || '').toUpperCase();
+      if (!payload.tipo) delete payload.tipo;
+      const validationError = validateEquipamento(payload);
+      if (validationError) {
+        await tryAuditLog({ action: 'ERROR', entity: 'equipamentos.validation', severity: 'WARN', details: { message: validationError } });
+        return toast(validationError, 'error');
+      }
       if (item) await updateEquipamento(item.id, payload); else await createEquipamento(payload);
+      await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'equipamentos', entityId: item?.id || null, details: { codigo: payload.codigo, status: payload.status } });
       closeModal();
       toast('Salvo com sucesso');
       renderEquipamentos(view);

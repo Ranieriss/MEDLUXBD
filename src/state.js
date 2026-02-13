@@ -1,3 +1,4 @@
+import { nowUtcIso } from './shared_datetime.js';
 export const state = {
   session: null,
   user: null,
@@ -22,7 +23,7 @@ export const setState = (patch) => {
 
 export function addDiagnosticError(err, context = 'desconhecido') {
   const payload = {
-    at: new Date().toISOString(),
+    at: nowUtcIso(),
     context,
     message: err?.message || String(err),
     details: err?.details || err?.hint || err?.code || null,
@@ -36,7 +37,7 @@ export function addDiagnosticError(err, context = 'desconhecido') {
 }
 
 export function addEvent(evt) {
-  state.events.unshift({ at: new Date().toISOString(), ...evt });
+  state.events.unshift({ at: nowUtcIso(), ...evt });
   state.events = state.events.slice(0, 100);
   listeners.forEach((fn) => fn(state));
 }

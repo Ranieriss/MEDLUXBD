@@ -56,3 +56,22 @@ URL pública:
 - `https://ranieriss.github.io/MEDLUXBD/`
 
 O `404.html` da raiz redireciona deep links para `index.html` com hash de rota para manter a SPA funcionando no Pages.
+
+## Release v1.0.0 (hardening)
+
+### SQL opcional (não executado automaticamente)
+No Supabase Dashboard:
+1. Clique em **SQL Editor**.
+2. Clique em **New query**.
+3. Cole e execute o script:
+
+```sql
+supabase/migrations/20260213090000_medluxbd_v1_hardening_optional.sql
+```
+
+Esse script adiciona `medicoes.deleted_at` para futuras estratégias de soft delete.
+
+### Verificação rápida de release
+- Versão exibida no app: `v1.0.0`.
+- Página Auditoria deve carregar mesmo com `audit_log` vazio.
+- CRUD com validação e confirmações fortes deve estar ativo.

@@ -12,7 +12,10 @@ import { renderMedicoes } from './pages/medicoes.js';
 import { renderAuditoria } from './pages/auditoria.js';
 import { renderUpdatePassword } from './pages/updatePassword.js';
 import { cleanAuthParamsFromUrl, hasRecoveryParams } from './auth/callback.js';
+import { APP_VERSION } from './version.js';
+import { createLogger } from './logger.js';
 
+const appLogger = createLogger('app');
 const links = [
   ['/dashboard', 'Dashboard'],
   ['/equipamentos', 'Equipamentos'],
@@ -25,13 +28,15 @@ const links = [
 function renderShell() {
   const sidebar = document.getElementById('sidebar');
   const topbar = document.getElementById('topbar');
+  const footerVersion = document.getElementById('app-version');
+  if (footerVersion) footerVersion.textContent = `v${APP_VERSION}`;
   if (!state.session) {
     sidebar.innerHTML = '';
     topbar.innerHTML = '';
     return;
   }
 
-  sidebar.innerHTML = `<div class="brand"><span>⚕️</span> MEDLUXBD</div><nav class="nav">${links.map(([path, label]) => `<a href="#${path}" class="${window.location.hash === `#${path}` ? 'active' : ''}">${label}</a>`).join('')}</nav>`;
+  sidebar.innerHTML = `<div class="brand"><span>⚕️</span> MEDLUXBD</div><nav class="nav">${links.map(([path, label]) => `<a href="#${path}" class="${window.location.hash === `#${path}` ? 'active' : ''}">${label}</a>`).join('')}</nav><p class="muted">Versão v${APP_VERSION}</p>`;
   topbar.innerHTML = `<div>Usuário: <b>${state.user?.email || '-'}</b> | Role: <b>${state.role}</b></div><div class="row"><button id="logout" class="secondary small">Sair</button></div>`;
   topbar.querySelector('#logout').onclick = async () => {
     const { error } = await supabase.auth.signOut();
@@ -88,10 +93,12 @@ setGuard(async (hash) => {
 subscribe(() => renderShell());
 
 window.addEventListener('error', (ev) => {
+  appLogger.error('window.error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno });
   addDiagnosticError(ev.error || new Error(ev.message), 'window.error');
   toast(`Erro: ${ev.message}`, 'error');
 });
 window.addEventListener('unhandledrejection', (ev) => {
+  appLogger.error('unhandledrejection', { reason: ev.reason?.message || String(ev.reason) });
   addDiagnosticError(ev.reason, 'unhandledrejection');
   toast(`Falha não tratada: ${ev.reason?.message || ev.reason}`, 'error');
 });
@@ -121,6 +128,7 @@ window.addEventListener('unhandledrejection', (ev) => {
     handleRoute();
   } catch (err) {
     addDiagnosticError(err, 'boot');
+    appLogger.error('boot failed', { message: err?.message });
     toast(`Falha ao inicializar app: ${err.message}`, 'error');
   }
 })();

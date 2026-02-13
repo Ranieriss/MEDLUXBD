@@ -24,15 +24,18 @@ function formEquipamento(item = {}) {
 }
 
 export async function renderEquipamentos(view) {
-  const items = await listEquipamentos();
+  let showDeleted = view.dataset.showDeleted === 'true';
+  let items = await listEquipamentos({ includeDeleted: showDeleted && state.role === 'ADMIN' });
   state.cache.equipamentos = items;
   let filtered = [...items];
 
+  const visibleItems = () => filtered.filter((i) => showDeleted || !i.deleted_at);
+
   const draw = () => {
     view.innerHTML = `<div class="panel">
-      <div class="row"><h2>Equipamentos</h2><input id="busca" placeholder="Buscar" /><button id="novo" class="small">Novo</button></div>
+      <div class="row"><h2>Equipamentos</h2><input id="busca" placeholder="Buscar" /><button id="novo" class="small">Novo</button>${state.role === 'ADMIN' ? `<label class="muted"><input type="checkbox" id="toggle-deleted" ${showDeleted ? 'checked' : ''}/> Mostrar removidos</label>` : ''}</div>
       <div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Modelo</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>${filtered.map((i) => `<tr><td>${escapeHtml(i.codigo)}</td><td>${escapeHtml(i.nome)}</td><td>${escapeHtml(i.modelo || '')}</td><td>${escapeHtml(i.status || '')}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small danger" data-del="${i.id}">Inativar</button></td></tr>`).join('') || '<tr><td colspan="5">Sem registros</td></tr>'}</tbody></table></div>
+      <tbody>${visibleItems().map((i) => `<tr><td>${escapeHtml(i.codigo || '-')}</td><td>${escapeHtml(i.nome || '-')}</td><td>${escapeHtml(i.modelo || '')}</td><td>${escapeHtml(i.status || '')}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small danger" data-del="${i.id}">Inativar</button></td></tr>`).join('') || '<tr><td colspan="5">Sem registros</td></tr>'}</tbody></table></div>
     </div>`;
     bind();
   };
@@ -44,11 +47,22 @@ export async function renderEquipamentos(view) {
       draw();
       view.querySelector('#busca').value = q;
     };
+    const toggle = view.querySelector('#toggle-deleted');
+    if (toggle) {
+      toggle.checked = showDeleted;
+      toggle.onchange = async () => {
+        showDeleted = toggle.checked;
+        view.dataset.showDeleted = String(showDeleted);
+        items = await listEquipamentos({ includeDeleted: showDeleted });
+        filtered = [...items];
+        draw();
+      };
+    }
     view.querySelector('#novo').onclick = () => showModal();
     view.querySelectorAll('[data-edit]').forEach((btn) => btn.onclick = () => showModal(items.find((i) => i.id === btn.dataset.edit)));
     view.querySelectorAll('[data-del]').forEach((btn) => btn.onclick = async () => {
-      const typed = window.prompt('Confirmação forte: digite EXCLUIR para inativar.');
-      if (typed !== 'EXCLUIR') return;
+      const typed = window.prompt('Confirmação forte: digite DELETE para inativar.');
+      if (typed !== 'DELETE') return;
       if (await hasEquipamentoDependencies(btn.dataset.del)) return toast('Bloqueado: equipamento possui vínculos ou medições.', 'error');
       await deleteEquipamento(btn.dataset.del);
       await tryAuditLog({ action: 'DELETE', entity: 'equipamentos', entityId: btn.dataset.del, details: { mode: 'soft_delete' } });
@@ -71,8 +85,8 @@ export async function renderEquipamentos(view) {
         await tryAuditLog({ action: 'ERROR', entity: 'equipamentos.validation', severity: 'WARN', details: { message: validationError } });
         return toast(validationError, 'error');
       }
-      if (item) await updateEquipamento(item.id, payload); else await createEquipamento(payload);
-      await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'equipamentos', entityId: item?.id || null, details: { codigo: payload.codigo, status: payload.status } });
+      const saved = item ? await updateEquipamento(item.id, payload) : await createEquipamento(payload);
+      await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'equipamentos', entityId: saved?.id || item?.id || null, details: { codigo: payload.codigo, status: payload.status }, before: item || null, after: saved || payload });
       closeModal();
       toast('Salvo com sucesso');
       renderEquipamentos(view);

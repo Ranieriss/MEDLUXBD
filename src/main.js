@@ -1,4 +1,4 @@
-import { assertSupabaseConfig, supabase } from './supabaseClient.js';
+import { assertSupabaseConfig, handleAppError, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
 import { toast } from './ui.js';
@@ -95,12 +95,12 @@ subscribe(() => renderShell());
 window.addEventListener('error', (ev) => {
   appLogger.error('window.error', { message: ev.message, source: ev.filename, line: ev.lineno, col: ev.colno });
   addDiagnosticError(ev.error || new Error(ev.message), 'window.error');
-  toast(`Erro: ${ev.message}`, 'error');
+  handleAppError(ev.error || new Error(ev.message), 'window.error');
 });
 window.addEventListener('unhandledrejection', (ev) => {
   appLogger.error('unhandledrejection', { reason: ev.reason?.message || String(ev.reason) });
   addDiagnosticError(ev.reason, 'unhandledrejection');
-  toast(`Falha não tratada: ${ev.reason?.message || ev.reason}`, 'error');
+  handleAppError(ev.reason || new Error('Falha não tratada'), 'unhandledrejection');
 });
 
 (async function boot() {

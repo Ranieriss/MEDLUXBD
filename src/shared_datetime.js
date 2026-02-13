@@ -7,6 +7,10 @@ export function nowUtcIso() {
   return new Date().toISOString();
 }
 
+export function parseDateTime(value) {
+  return parseIsoSafe(value);
+}
+
 export function parseIsoSafe(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -31,4 +35,8 @@ export function formatLocalBrSafe(value) {
   const parsed = parseIsoSafe(value);
   if (!parsed) return '-';
   return BR_FORMATTER.format(parsed);
+}
+
+export function formatDateTime(value) {
+  return formatLocalBrSafe(value);
 }

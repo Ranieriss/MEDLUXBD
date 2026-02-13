@@ -71,7 +71,24 @@ supabase/migrations/20260213090000_medluxbd_v1_hardening_optional.sql
 
 Esse script adiciona `medicoes.deleted_at` para futuras estratégias de soft delete.
 
+### SQL opcional (fundação multi-tenant + soft delete completo)
+Para ambientes com RLS por organização (`public.current_org_id()`), execute também:
+
+```sql
+supabase/migrations/20260213120000_medluxbd_org_softdelete_foundation_optional.sql
+```
+
+Esse script adiciona colunas `organization_id`/`deleted_at` nas entidades principais e cria a função `public.current_org_id()` baseada em `profiles.organization_id`.
+
 ### Verificação rápida de release
 - Versão exibida no app: `v1.0.0`.
 - Página Auditoria deve carregar mesmo com `audit_log` vazio.
 - CRUD com validação e confirmações fortes deve estar ativo.
+
+### Smoke test rápido (frontend)
+1. `python -m http.server 8000`
+2. Abra `http://localhost:8000/`.
+3. Faça login com usuário ADMIN e valide:
+   - toggle "Mostrar removidos" nas páginas de cadastro;
+   - exclusão com confirmação digitando `DELETE`;
+   - eventos/erros no menu Auditoria.

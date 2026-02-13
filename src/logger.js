@@ -20,11 +20,12 @@ export function createLogger(context) {
 
   const write = (level, message, meta = {}) => {
     const payload = {
-      ...base,
+      context: base.context,
+      correlationId: base.correlationId,
+      ts: nowUtcIso(),
       level,
       message,
-      at: nowUtcIso(),
-      meta: cleanMeta(meta)
+      details: cleanMeta(meta)
     };
     if (level === 'ERROR') {
       addDiagnosticError(new Error(message), context);
@@ -34,7 +35,7 @@ export function createLogger(context) {
     } else {
       console.info('[MEDLUXBD]', payload);
     }
-    addEvent({ type: level, message: `${context}: ${message}`, meta: payload.meta, correlationId: base.correlationId });
+    addEvent({ type: level, message: `${context}: ${message}`, details: payload.details, correlationId: base.correlationId });
     return payload;
   };
 

@@ -38,14 +38,15 @@ function printMedicao(item) {
 }
 
 export async function renderMedicoes(view) {
+  const showDeleted = view.dataset.showDeleted === 'true';
   const [equipamentos, obras] = await Promise.all([listEquipamentos(), listObras()]);
   let filters = {};
-  let items = await listMedicoes(filters);
+  let items = await listMedicoes(filters, { includeDeleted: showDeleted && state.role === 'ADMIN' });
   state.cache.medicoes = items;
 
   const redraw = async () => {
-    items = await listMedicoes(filters);
-    view.innerHTML = `<div class="panel"><div class="row"><h2>Medições</h2><select id="f-obra"><option value="">Todas obras</option>${obras.map(o=>`<option value="${o.id}" ${filters.obra_id===o.id?'selected':''}>${escapeHtml(o.codigo)}</option>`).join('')}</select><select id="f-eq"><option value="">Todos equipamentos</option>${equipamentos.map(e=>`<option value="${e.id}" ${filters.equipamento_id===e.id?'selected':''}>${escapeHtml(e.codigo)}</option>`).join('')}</select><button id="novo" class="small">Novo</button></div>
+    items = await listMedicoes(filters, { includeDeleted: showDeleted && state.role === 'ADMIN' });
+    view.innerHTML = `<div class="panel"><div class="row"><h2>Medições</h2><select id="f-obra"><option value="">Todas obras</option>${obras.map(o=>`<option value="${o.id}" ${filters.obra_id===o.id?'selected':''}>${escapeHtml(o.codigo)}</option>`).join('')}</select><select id="f-eq"><option value="">Todos equipamentos</option>${equipamentos.map(e=>`<option value="${e.id}" ${filters.equipamento_id===e.id?'selected':''}>${escapeHtml(e.codigo)}</option>`).join('')}</select><button id="novo" class="small">Novo</button>${state.role === 'ADMIN' ? `<label class="muted"><input type="checkbox" id="toggle-deleted" ${showDeleted ? 'checked' : ''}/> Mostrar removidas</label>` : ''}</div>
       <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Valor</th><th>Conforme</th><th>Medição em</th><th>Ações</th></tr></thead><tbody>
       ${items.map(i => `<tr><td>${escapeHtml(i.tipo)}</td><td>${escapeHtml(i.valor)} ${escapeHtml(i.unidade)}</td><td>${i.conforme ? 'Sim' : 'Não'}</td><td>${escapeHtml(formatLocalBrSafe(i.medido_em || ''))}</td><td class="row"><button class="small" data-edit="${i.id}">Editar</button><button class="small secondary" data-pdf="${i.id}">Gerar PDF individual</button><button class="small danger" data-del="${i.id}">Excluir</button></td></tr>`).join('') || '<tr><td colspan="5">Sem medições</td></tr>'}
       </tbody></table></div></div>`;
@@ -53,12 +54,19 @@ export async function renderMedicoes(view) {
     view.querySelector('#f-obra').onchange = (e) => { filters.obra_id = e.target.value || undefined; redraw(); };
     view.querySelector('#f-eq').onchange = (e) => { filters.equipamento_id = e.target.value || undefined; redraw(); };
     view.querySelector('#novo').onclick = () => openEditor();
+    const toggle = view.querySelector('#toggle-deleted');
+    if (toggle) {
+      toggle.onchange = () => {
+        view.dataset.showDeleted = String(toggle.checked);
+        renderMedicoes(view);
+      };
+    }
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find(i => i.id === b.dataset.edit)));
     view.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = () => printMedicao(items.find(i => i.id === b.dataset.pdf)));
     view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-      const typed = window.prompt('Confirmação forte: digite EXCLUIR para remover medição.');
-      if (typed !== 'EXCLUIR') return;
-      try { await deleteMedicao(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'medicoes', entityId: b.dataset.del }); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
+      const typed = window.prompt('Confirmação forte: digite DELETE para remover medição.');
+      if (typed !== 'DELETE') return;
+      try { await deleteMedicao(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'medicoes', entityId: b.dataset.del, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set' } }); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
     });
   };
 
@@ -77,8 +85,8 @@ export async function renderMedicoes(view) {
       const allowed = await canCreateMedicao({ equipamento_id: payload.equipamento_id, user_id: payload.user_id });
       if (!allowed) return toast('Regra de segurança: usuário não vinculado ao equipamento para registrar medição.', 'error');
       try {
-        if (item) await updateMedicao(item.id, payload); else await createMedicao(payload);
-        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'medicoes', entityId: item?.id || null, details: { equipamento_id: payload.equipamento_id, tipo: payload.tipo } });
+        const saved = item ? await updateMedicao(item.id, payload) : await createMedicao(payload);
+        await tryAuditLog({ action: item ? 'UPDATE' : 'CREATE', entity: 'medicoes', entityId: saved?.id || item?.id || null, details: { equipamento_id: payload.equipamento_id, tipo: payload.tipo }, before: item || null, after: saved || payload });
         closeModal();
         redraw();
         toast('Medição salva');

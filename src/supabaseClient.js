@@ -79,6 +79,14 @@ export function logSupabaseAuthError(error, context = 'auth') {
   });
 }
 
+
+export function logSupabaseRestError(error, context = 'rest') {
+  const status = error?.status ?? null;
+  const code = error?.code ?? null;
+  const message = error?.message ?? String(error);
+  console.error(`[${context}] Supabase REST error`, { status, code, message, error });
+}
+
 export function assertSupabaseConfig() {
   if (configErrorMessage) {
     const err = new Error(configErrorMessage);
@@ -94,6 +102,7 @@ export async function runQuery(promise, context = 'api') {
     if (error) throw error;
     return data;
   } catch (error) {
+    logSupabaseRestError(error, context);
     addDiagnosticError(error, context);
     throw error;
   }

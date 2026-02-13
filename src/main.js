@@ -11,11 +11,7 @@ import { renderVinculos } from './pages/vinculos.js';
 import { renderMedicoes } from './pages/medicoes.js';
 import { renderAuditoria } from './pages/auditoria.js';
 import { renderUpdatePassword } from './pages/updatePassword.js';
-import {
-  cleanAuthParamsFromUrl,
-  hasRecoveryParams,
-  trySetSessionFromUrl
-} from './auth/callback.js';
+import { cleanAuthParamsFromUrl, hasRecoveryParams } from './auth/callback.js';
 
 const links = [
   ['/dashboard', 'Dashboard'],
@@ -104,33 +100,14 @@ window.addEventListener('unhandledrejection', (ev) => {
   try {
     assertSupabaseConfig();
 
-    if (hasRecoveryParams()) {
-      const recoveryResult = await trySetSessionFromUrl(supabase);
-      if (recoveryResult.error) {
-        addDiagnosticError(recoveryResult.error, `auth.${recoveryResult.method}`);
-      }
-
-      if (recoveryResult.session) {
-        setState({ session: recoveryResult.session, user: recoveryResult.session.user || null });
-        await loadProfile();
-      }
-
-      navigate('/reset-password');
-      cleanAuthParamsFromUrl('/reset-password');
-    }
-
-    if (hasRecoveryParams()) {
-      cleanAuthParamsFromUrl(window.location.hash.replace('#', '') || '/dashboard');
-    }
-
     const { data } = await supabase.auth.getSession();
     setState({ session: data.session, user: data.session?.user || null });
     if (data.session?.user) await loadProfile();
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
-        navigate('/reset-password');
-        cleanAuthParamsFromUrl('/reset-password');
+        navigate('/update-password');
+        cleanAuthParamsFromUrl('/update-password');
         return;
       }
 

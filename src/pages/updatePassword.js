@@ -13,10 +13,8 @@ import { navigate } from '../router.js';
 import { toast } from '../ui.js';
 import {
   cleanAuthParamsFromUrl,
-  hasRecoveryParams,
   parseHashParams,
-  parseQueryParams,
-  trySetSessionFromUrl
+  parseQueryParams
 } from '../auth/callback.js';
 
 function getEmailPrefillFromUrl() {
@@ -79,7 +77,7 @@ export async function renderUpdatePassword(view) {
     toast(msg, 'error');
   };
 
-  const showInvalidLinkState = (friendlyMessage = 'Link inválido/expirado. Solicite novo link.') => {
+  const showInvalidLinkState = (friendlyMessage = 'Link inválido ou expirado. Clique em ‘Reenviar link’ na tela de login.') => {
     messageEl.textContent = friendlyMessage;
     formEl.style.display = 'none';
     requestLinkButton.style.display = 'inline-flex';
@@ -117,11 +115,11 @@ export async function renderUpdatePassword(view) {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
 
-      cleanAuthParamsFromUrl('/reset-password');
-      toast('Senha atualizada com sucesso. Faça login novamente.');
-      addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
       await supabase.auth.signOut();
       setState({ session: null, user: null, profile: null, role: 'USER' });
+      cleanAuthParamsFromUrl('/login');
+      toast('Senha atualizada');
+      addEvent({ type: 'password.update', message: 'Senha atualizada via recovery' });
       navigate('/login');
     } catch (error) {
       logSupabaseAuthError(error, 'auth.updatePassword');
@@ -132,16 +130,18 @@ export async function renderUpdatePassword(view) {
 
   try {
     assertSupabaseConfig();
+    const query = parseQueryParams();
+    const hash = parseHashParams();
+    const accessToken = hash.get('access_token') || query.get('access_token');
+    const refreshToken = hash.get('refresh_token') || query.get('refresh_token');
 
-    if (hasRecoveryParams()) {
-      const setFromUrlResult = await trySetSessionFromUrl(supabase);
-      if (!setFromUrlResult.ok && setFromUrlResult.error) {
-        logSupabaseAuthError(setFromUrlResult.error, `auth.${setFromUrlResult.method}`);
-        addDiagnosticError(setFromUrlResult.error, `auth.${setFromUrlResult.method}`);
-        setErr(setFromUrlResult.error);
-      }
-
-      cleanAuthParamsFromUrl('/reset-password');
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+      if (error) throw error;
+      cleanAuthParamsFromUrl('/update-password');
     }
 
     const { data, error } = await supabase.auth.getSession();

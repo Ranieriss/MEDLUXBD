@@ -15,7 +15,7 @@ import { getBasePath } from '../url.js';
 let authActionInFlight = false;
 
 function getRedirectToUpdatePassword() {
-  return `${window.location.origin}${getBasePath()}#/reset-password`;
+  return `${window.location.origin}${getBasePath()}#/update-password`;
 }
 
 async function tryAutoLoginAfterSignupConflict(email, password, setInfo) {
@@ -206,7 +206,7 @@ export async function renderLogin(view) {
         return setErr(error);
       }
 
-      setInfo('Link enviado. Verifique sua caixa de entrada.');
+      setInfo('Se existir uma conta para este e-mail, enviamos o link de recuperação. Verifique sua caixa de entrada.');
     } catch (err) {
       logSupabaseAuthError(err, 'auth.resetPassword');
       addDiagnosticError(err, 'auth.resetPassword');

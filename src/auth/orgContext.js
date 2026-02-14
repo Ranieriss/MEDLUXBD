@@ -1,77 +1,67 @@
 import { supabase } from '../supabaseClient.js';
 
-let orgContextInitialized = false;
+let orgInitialized = false;
+let currentUserId = null;
 
-/**
- * Reseta o contexto da organização
- */
-export function resetOrgContext() {
-  orgContextInitialized = false;
+export async function resetOrgContext() {
+  orgInitialized = false;
+  currentUserId = null;
 }
 
-/**
- * Garante que o contexto da organização está definido
- */
-export async function ensureOrgContext(user = null) {
-  try {
-    const {
-      data: { user: currentUser }
-    } = user
-      ? { data: { user } }
-      : await supabase.auth.getUser();
+export async function ensureOrgContext() {
+  // 1️⃣ Garantir que o usuário já está autenticado
+  const {
+    data: { user },
+    error: userError
+  } = await supabase.auth.getUser();
 
-    if (!currentUser?.id) {
-      return { organizationId: null, role: null, skipped: true };
-    }
+  if (userError) throw userError;
 
-    // Evita rodar múltiplas vezes
-    if (orgContextInitialized) {
-      return { organizationId: null, role: null, skipped: true };
-    }
-
-    // Busca perfil do usuário
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', currentUser.id)
-      .single();
-
-    if (profileError) {
-      console.error('Erro ao buscar profile:', profileError);
-      throw profileError;
-    }
-
-    const organizationId = profile?.organization_id || null;
-    const role = profile?.role || 'USER';
-
-    // ADMIN sem organização não trava sistema
-    if (!organizationId) {
-      if (role === 'ADMIN') {
-        orgContextInitialized = true;
-        return { organizationId: null, role, skipped: true };
-      }
-
-      throw new Error(
-        'Usuário sem organization_id definido. Fale com o administrador.'
-      );
-    }
-
-    // Chama RPC para setar organização atual
-    const { error: rpcError } = await supabase.rpc('set_current_org', {
-      org_id: organizationId
-    });
-
-    if (rpcError) {
-      console.error('Erro RPC set_current_org:', rpcError);
-      throw rpcError;
-    }
-
-    orgContextInitialized = true;
-
-    return { organizationId, role, skipped: false };
-  } catch (err) {
-    console.error('Erro ensureOrgContext:', err);
+  if (!user) {
     resetOrgContext();
-    throw err;
+    return { organizationId: null, role: null };
   }
+
+  // Evita rodar duas vezes para o mesmo usuário
+  if (orgInitialized && currentUserId === user.id) {
+    return;
+  }
+
+  currentUserId = user.id;
+
+  // 2️⃣ Buscar profile
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('organization_id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError) throw profileError;
+
+  if (!profile?.organization_id) {
+    if (profile?.role === 'ADMIN') {
+      orgInitialized = true;
+      return;
+    }
+
+    throw new Error(
+      'Usuário não possui organization_id definido. Contate o administrador.'
+    );
+  }
+
+  // 3️⃣ IMPORTANTE: aguardar RPC finalizar
+  const { error: rpcError } = await supabase.rpc('set_current_org', {
+    org_id: profile.organization_id
+  });
+
+  if (rpcError) throw rpcError;
+
+  orgInitialized = true;
+
+  console.log('✅ Contexto da organização definido:', profile.organization_id);
+
+  return {
+    organizationId: profile.organization_id,
+    role: profile.role
+  };
 }

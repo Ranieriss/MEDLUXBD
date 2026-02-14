@@ -1,4 +1,4 @@
-import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, listVinculos, updateVinculo } from '../api/vinculos.js';
+import { createVinculo, deleteVinculo, encerrarVinculo, getVinculoFileUrl, hasActiveVinculoByEquipamento, listVinculos, updateVinculo } from '../api/vinculos.js';
 import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { uploadTermo } from '../api/storage.js';
@@ -68,6 +68,12 @@ export async function renderVinculos(view) {
           return toast(validationError, 'error');
         }
         if (!payload.obra_id) return toast('obra_id é obrigatório para vínculo.', 'error');
+        if (payload.status === 'ATIVO') {
+          const hasDuplicate = await hasActiveVinculoByEquipamento(payload.equipamento_id, item?.id || null);
+          if (hasDuplicate) {
+            return toast('Já existe vínculo ATIVO para este equipamento. Encerre o vínculo atual para continuar.', 'error');
+          }
+        }
         const file = form.querySelector('input[name="termo"]').files[0];
         if (file) {
           const obraCodigo = (obras.find((o) => o.id === payload.obra_id)?.codigo || 'obra').toString();

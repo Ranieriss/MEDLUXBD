@@ -8,9 +8,23 @@ function randomId() {
 
 export const pageCorrelationId = randomId();
 
+function deepSanitize(value) {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((item) => deepSanitize(item));
+  if (typeof value !== 'object') return value;
+
+  const clean = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    const normalizedKey = String(key || '').toLowerCase();
+    if (normalizedKey.includes('password') || normalizedKey.includes('token')) return;
+    clean[key] = deepSanitize(entryValue);
+  });
+  return clean;
+}
+
 function cleanMeta(meta) {
   try {
-    return JSON.parse(JSON.stringify(meta || {}));
+    return deepSanitize(JSON.parse(JSON.stringify(meta || {})));
   } catch (_error) {
     return { note: 'meta_non_serializable' };
   }

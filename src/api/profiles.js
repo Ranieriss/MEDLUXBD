@@ -1,6 +1,6 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 
-const PROFILE_COLUMNS = 'id,email,nome,role,organization_id,created_at,updated_at';
+const PROFILE_COLUMNS = 'id,email,nome,role,created_at,updated_at';
 
 export function ensureProfileShape(profile = {}, fallback = {}) {
   const email = profile.email || fallback.email || '';
@@ -10,8 +10,7 @@ export function ensureProfileShape(profile = {}, fallback = {}) {
     id: profile.id || fallback.id || null,
     email,
     nome: profile.nome || nomeBase || 'Usuário',
-    role: profile.role || fallback.role || 'USER',
-    organization_id: profile.organization_id || fallback.organization_id || null
+    role: profile.role || fallback.role || 'USER'
   };
 }
 

@@ -2,7 +2,7 @@ import { canCreateMedicao, createMedicao, deleteMedicao, listMedicoes, updateMed
 import { listEquipamentos } from '../api/equipamentos.js';
 import { listObras } from '../api/obras.js';
 import { state } from '../state.js';
-import { closeModal, openModal, toast, escapeHtml } from '../ui.js';
+import { closeModal, openModal, toast, escapeHtml, confirmDestructiveModal } from '../ui.js';
 import { toFriendlyErrorMessage } from '../supabaseClient.js';
 import { formatLocalBrSafe, localInputToUtcIso, toInputDateTimeLocal } from '../shared_datetime.js';
 import { validateMedicao } from '../validators.js';
@@ -64,8 +64,8 @@ export async function renderMedicoes(view) {
     view.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => openEditor(items.find(i => i.id === b.dataset.edit)));
     view.querySelectorAll('[data-pdf]').forEach((b) => b.onclick = () => printMedicao(items.find(i => i.id === b.dataset.pdf)));
     view.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-      const typed = window.prompt('Confirmação forte: digite DELETE para remover medição.');
-      if (typed !== 'DELETE') return;
+      const confirmed = await confirmDestructiveModal('Confirme a remoção lógica da medição.');
+      if (!confirmed) return;
       try { await deleteMedicao(b.dataset.del); await tryAuditLog({ action: 'DELETE', entity: 'medicoes', entityId: b.dataset.del, before: items.find((i) => i.id === b.dataset.del) || null, after: { deleted_at: 'set' } }); redraw(); } catch (error) { toast(toFriendlyErrorMessage(error), 'error'); }
     });
   };

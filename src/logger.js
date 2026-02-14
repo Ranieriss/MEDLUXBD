@@ -33,7 +33,18 @@ function cleanMeta(meta) {
 export async function sendAppLog(payload) {
   try {
     const { supabase } = await import('./supabaseClient.js');
-    await supabase.from('app_logs').insert(payload);
+    const { error } = await supabase.from('app_logs').insert(payload);
+    if (!error) return;
+
+    if (error.code === '42703' && Object.prototype.hasOwnProperty.call(payload, 'timestamp')) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.timestamp;
+      const { error: fallbackError } = await supabase.from('app_logs').insert(fallbackPayload);
+      if (!fallbackError) return;
+      throw fallbackError;
+    }
+
+    throw error;
   } catch (error) {
     console.warn('[MEDLUXBD][app_logs] falha ao enviar log', error?.message || error);
   }

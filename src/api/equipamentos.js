@@ -1,6 +1,7 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 import { EQUIPAMENTO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
+import { ensurePayloadOrgId } from './tenant.js';
 
 const EQUIPAMENTO_LEGACY_COLUMNS = 'id,codigo,nome,modelo,tipo,status,created_at,updated_at';
 
@@ -24,15 +25,17 @@ export async function listEquipamentos({ includeDeleted = false } = {}) {
   }
 }
 
-export const createEquipamento = async (payload) =>
-  runQuery(
+export const createEquipamento = async (payload) => {
+  const payloadWithOrg = await ensurePayloadOrgId(payload, 'equipamentos.create');
+  return runQuery(
     supabase
       .from('equipamentos')
-      .insert({ ...payload, created_at: payload.created_at || nowUtcIso() })
+      .insert({ ...payloadWithOrg, created_at: payloadWithOrg.created_at || nowUtcIso() })
       .select(EQUIPAMENTO_SELECT_COLUMNS)
       .single(),
     'equipamentos.create'
   );
+};
 
 export const updateEquipamento = async (id, payload) =>
   runQuery(

@@ -91,3 +91,22 @@ supabase/migrations/20260213090000_medluxbd_v1_hardening_optional.sql
    - toggle "Mostrar removidos" nas páginas de cadastro;
    - encerramento/exclusão lógica de vínculos;
    - eventos/erros no menu Auditoria.
+
+## Como configurar `org_id`
+1. No Supabase SQL Editor, garanta pelo menos uma organização em `public.organizations`:
+   ```sql
+   insert into public.organizations (id, nome)
+   values (gen_random_uuid(), 'ICD Vias')
+   on conflict do nothing;
+   ```
+2. Defina `public.profiles.org_id` para cada usuário autenticado:
+   ```sql
+   update public.profiles p
+   set org_id = o.id,
+       organization_id = o.id
+   from public.organizations o
+   where o.nome = 'ICD Vias'
+     and p.org_id is null;
+   ```
+3. Rode a migration `supabase/migrations/20260214191000_org_id_rls_without_session_context.sql`.
+4. Faça login no app com usuário comum e ADMIN, e valide que listagens (`equipamentos`, `obras`, `vinculos`, `medicoes`) retornam apenas dados da organização correta.

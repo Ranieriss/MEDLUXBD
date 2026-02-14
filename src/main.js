@@ -1,7 +1,7 @@
 import { assertSupabaseConfig, handleAppError, supabase } from './supabaseClient.js';
 import { handleRoute, navigate, registerRoute, setGuard } from './router.js';
 import { addDiagnosticError, addEvent, setState, state, subscribe } from './state.js';
-import { ensureProfileShape, getMyProfile, upsertProfile } from './api/profiles.js';
+import { ensureUserProfileWithOrg } from './api/profiles.js';
 import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderEquipamentos } from './pages/equipamentos.js';
@@ -52,7 +52,7 @@ function renderShell() {
 
 function isMissingOrganizationError(error) {
   const message = String(error?.message || '').toLowerCase();
-  return message.includes('não está vinculado a uma organização') || message.includes('organization_id');
+  return message.includes('não está vinculado a uma organização') || message.includes('organization_id') || message.includes('org_id');
 }
 
 function notifyOrgContextError(error) {
@@ -64,29 +64,11 @@ function notifyOrgContextError(error) {
 
 async function loadProfile() {
   if (!state.user?.id) return;
-  let profile = await getMyProfile(state.user.id);
-  if (!profile) {
-    profile = await upsertProfile({
-      id: state.user.id,
-      role: 'USER',
-      email: state.user.email,
-      nome: (state.user.email || '').split('@')[0] || 'Usuário'
-    });
-  }
-
-  const completeProfile = ensureProfileShape(profile, {
-    id: state.user.id,
-    email: state.user.email,
-    role: 'USER'
-  });
-
-  if (!profile?.nome || !profile?.email || !profile?.role) {
-    await upsertProfile(completeProfile);
-  }
+  const profile = await ensureUserProfileWithOrg(state.user);
 
   setState({
-    profile: completeProfile,
-    role: completeProfile.role || 'USER'
+    profile,
+    role: profile?.role || 'USER'
   });
 }
 

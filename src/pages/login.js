@@ -75,7 +75,7 @@ function isValidEmail(email) {
 
 function toOrgContextFriendlyMessage(error) {
   const rawMessage = String(error?.message || '').toLowerCase();
-  if (rawMessage.includes('não está vinculado a uma organização') || rawMessage.includes('organization_id')) {
+  if (rawMessage.includes('não está vinculado a uma organização') || rawMessage.includes('organization_id') || rawMessage.includes('org_id')) {
     return 'Sua conta ainda não está vinculada a uma organização. Fale com o administrador para liberar seu acesso.';
   }
   return 'Não foi possível preparar seu acesso à organização agora. Tente novamente em instantes.';

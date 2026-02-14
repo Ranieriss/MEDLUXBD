@@ -1,6 +1,7 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 import { OBRA_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
+import { ensurePayloadOrgId } from './tenant.js';
 
 const OBRA_LEGACY_COLUMNS = 'id,codigo,nome,local,status,created_at,updated_at';
 
@@ -18,15 +19,17 @@ export async function listObras({ includeDeleted = false } = {}) {
   }
 }
 
-export const createObra = async (payload) =>
-  runQuery(
+export const createObra = async (payload) => {
+  const payloadWithOrg = await ensurePayloadOrgId(payload, 'obras.create');
+  return runQuery(
     supabase
       .from('obras')
-      .insert({ ...payload, created_at: payload.created_at || nowUtcIso() })
+      .insert({ ...payloadWithOrg, created_at: payloadWithOrg.created_at || nowUtcIso() })
       .select(OBRA_SELECT_COLUMNS)
       .single(),
     'obras.create'
   );
+};
 
 export const updateObra = async (id, payload) =>
   runQuery(

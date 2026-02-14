@@ -23,15 +23,28 @@ function stringifyPayload(payload) {
   }
 }
 
+async function loadAuditRowsWithTimeFallback() {
+  const orderedByTimestamp = await supabase
+    .from('audit_log')
+    .select(AUDIT_LOG_SELECT_COLUMNS)
+    .order('timestamp', { ascending: false })
+    .limit(20);
+
+  if (!orderedByTimestamp.error) return orderedByTimestamp;
+  if (orderedByTimestamp.error.code !== '42703') return orderedByTimestamp;
+
+  return supabase
+    .from('audit_log')
+    .select(AUDIT_LOG_SELECT_COLUMNS.replace('timestamp,', ''))
+    .order('created_at', { ascending: false })
+    .limit(20);
+}
+
 export async function renderAuditoria(view) {
   let auditRows = [];
   let auditMsg = '';
   try {
-    const { data, error } = await supabase
-      .from('audit_log')
-      .select(AUDIT_LOG_SELECT_COLUMNS)
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const { data, error } = await loadAuditRowsWithTimeFallback();
     if (error) throw error;
     auditRows = data || [];
   } catch (e) {
@@ -51,7 +64,7 @@ export async function renderAuditoria(view) {
   <h3>Audit log (Supabase)</h3>
   <p class="muted">${escapeHtml(auditMsg || 'OK')}</p>
   <div class="table-wrap"><table><thead><tr><th>ID</th><th>Quando</th><th>Usuário</th><th>Ação</th><th>Payload</th></tr></thead><tbody>
-  ${auditRows.map((r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(formatLocalBrSafe(r.created_at || ''))}</td><td>${escapeHtml(r.user_id || '-')}</td><td>${escapeHtml(r.action || '')}</td><td><pre>${escapeHtml(stringifyPayload(r.payload))}</pre></td></tr>`).join('') || '<tr><td colspan="5">Não configurado</td></tr>'}
+  ${auditRows.map((r) => `<tr><td>${escapeHtml(r.id)}</td><td>${escapeHtml(formatLocalBrSafe(r.timestamp || r.created_at || ''))}</td><td>${escapeHtml(r.user_id || '-')}</td><td>${escapeHtml(r.action || '')}</td><td><pre>${escapeHtml(stringifyPayload(r.payload))}</pre></td></tr>`).join('') || '<tr><td colspan="5">Não configurado</td></tr>'}
   </tbody></table></div>
   </div>`;
 }

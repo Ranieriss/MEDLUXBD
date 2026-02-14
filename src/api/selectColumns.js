@@ -38,4 +38,4 @@ export const MEDICAO_SELECT_COLUMNS = [
   'updated_at'
 ].join(',');
 
-export const AUDIT_LOG_SELECT_COLUMNS = 'id,created_at,user_id,action,payload';
+export const AUDIT_LOG_SELECT_COLUMNS = 'id,timestamp,created_at,user_id,action,payload';

@@ -11,6 +11,7 @@ import { addDiagnosticError, addEvent, setState } from '../state.js';
 import { navigate } from '../router.js';
 import { openModal, toast } from '../ui.js';
 import { getBasePath } from '../url.js';
+import { ensureOrgContext } from '../auth/orgContext.js';
 
 let authActionInFlight = false;
 
@@ -28,6 +29,7 @@ async function tryAutoLoginAfterSignupConflict(email, password, setInfo) {
     throw error;
   }
 
+  await ensureOrgContext(data.user);
   setState({ session: data.session, user: data.user });
   addEvent({ type: 'login', message: `Login automático após cadastro: ${email}` });
   toast('Conta já existia; login realizado com sucesso.');
@@ -151,6 +153,7 @@ export async function renderLogin(view) {
         return setErr(error);
       }
 
+      await ensureOrgContext(data.user);
       setState({ session: data.session, user: data.user });
       addEvent({ type: 'login', message: `Login realizado: ${email}` });
       navigate('/dashboard');
@@ -183,7 +186,10 @@ export async function renderLogin(view) {
 
       setInfo('Conta criada. Verifique seu e-mail para confirmar cadastro, se necessário.');
       addEvent({ type: 'signup', message: `Conta criada: ${email}` });
-      if (data.session) navigate('/dashboard');
+      if (data.session) {
+        await ensureOrgContext(data.user);
+        navigate('/dashboard');
+      }
     } catch (err) {
       logSupabaseAuthError(err, 'auth.signup');
       addDiagnosticError(err, 'auth.signup');

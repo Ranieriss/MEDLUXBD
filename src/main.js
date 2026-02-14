@@ -14,6 +14,7 @@ import { cleanAuthParamsFromUrl, hasRecoveryParams } from './auth/callback.js';
 import { APP_VERSION } from './version.js';
 import { createLogger } from './logger.js';
 import { handleGlobalError } from './errorHandling.js';
+import { ensureOrgContext, resetOrgContext } from './auth/orgContext.js';
 
 const appLogger = createLogger('app');
 const links = [
@@ -41,6 +42,7 @@ function renderShell() {
   topbar.querySelector('#logout').onclick = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) addDiagnosticError(error, 'auth.logout');
+    resetOrgContext();
     setState({ session: null, user: null, profile: null, role: 'USER' });
     addEvent({ type: 'logout', message: 'Logout realizado' });
     navigate('/login');
@@ -89,6 +91,7 @@ setGuard(async (hash) => {
   const isLogin = hash === '/login';
   const isRecovery = hash === '/update-password' || hash === '/reset-password';
   if (!state.session && !isLogin && !isRecovery) return '/login';
+  if (state.session && !isLogin && !isRecovery) await ensureOrgContext(state.user);
   if (state.session && isLogin) return '/dashboard';
   return null;
 });
@@ -125,6 +128,7 @@ window.addEventListener('unhandledrejection', (ev) => {
     assertSupabaseConfig();
 
     const { data } = await supabase.auth.getSession();
+    if (data.session?.user) await ensureOrgContext(data.session.user);
     setState({ session: data.session, user: data.session?.user || null });
     if (data.session?.user) await loadProfile();
 
@@ -135,6 +139,8 @@ window.addEventListener('unhandledrejection', (ev) => {
         return;
       }
 
+      if (session?.user) await ensureOrgContext(session.user);
+      else resetOrgContext();
       setState({ session, user: session?.user || null });
       if (session?.user) await loadProfile();
       if (hasRecoveryParams()) cleanAuthParamsFromUrl(window.location.hash.replace('#', '') || '/dashboard');

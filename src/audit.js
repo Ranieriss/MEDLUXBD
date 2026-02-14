@@ -3,10 +3,17 @@ import { state } from './state.js';
 import { APP_VERSION } from './version.js';
 import { pageCorrelationId } from './logger.js';
 
-function sanitizeDetails(details = {}) {
-  const clone = { ...details };
-  delete clone.password;
-  delete clone.token;
+function sanitizeDetails(value) {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeDetails(item));
+  if (typeof value !== 'object') return value;
+
+  const clone = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    const normalizedKey = String(key || '').toLowerCase();
+    if (normalizedKey.includes('password') || normalizedKey.includes('token')) return;
+    clone[key] = sanitizeDetails(entryValue);
+  });
   return clone;
 }
 
@@ -29,6 +36,7 @@ export async function tryAuditLog({
   const normalizedSeverity = normalizeSeverity(action, severity);
   const row = {
     user_id: state.user?.id || null,
+    user_ref: state.user?.email || state.user?.id || null,
     action: `${action}:${entity}`,
     payload: {
       entity,
@@ -37,7 +45,7 @@ export async function tryAuditLog({
       route,
       app_version: APP_VERSION,
       correlation_id: pageCorrelationId,
-      details: sanitizeDetails(details),
+      details: sanitizeDetails(details || {}),
       before: before ? sanitizeDetails(before) : null,
       after: after ? sanitizeDetails(after) : null
     }

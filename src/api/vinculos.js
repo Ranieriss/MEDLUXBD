@@ -1,6 +1,7 @@
 import { supabase, runQuery, getSignedFileUrl } from '../supabaseClient.js';
 import { VINCULO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
+import { ensurePayloadOrgId } from './tenant.js';
 import { state } from '../state.js';
 
 const VINCULO_LEGACY_COLUMNS =
@@ -49,10 +50,11 @@ async function assertNoDuplicateActiveVinculo(payload, excludedId = null) {
 
 export const createVinculo = async (payload) => {
   await assertNoDuplicateActiveVinculo(payload);
+  const payloadWithOrg = await ensurePayloadOrgId(payload, 'vinculos.create');
   return runQuery(
     supabase
       .from('vinculos')
-      .insert({ ...payload, created_at: payload.created_at || nowUtcIso() })
+      .insert({ ...payloadWithOrg, created_at: payloadWithOrg.created_at || nowUtcIso() })
       .select(VINCULO_SELECT_COLUMNS)
       .single(),
     'vinculos.create'

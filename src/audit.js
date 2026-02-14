@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { state } from './state.js';
 import { APP_VERSION } from './version.js';
+import { getCurrentOrgIdOrWarn } from './api/tenant.js';
 import { pageCorrelationId } from './logger.js';
 
 function sanitizeDetails(value) {
@@ -34,9 +35,12 @@ export async function tryAuditLog({
   route = window.location.hash.replace('#', '') || '/'
 }) {
   const normalizedSeverity = normalizeSeverity(action, severity);
+  const orgId = await getCurrentOrgIdOrWarn('audit.insert');
   const row = {
     user_id: state.user?.id || null,
     user_ref: state.user?.email || state.user?.id || null,
+    org_id: orgId,
+    organization_id: orgId,
     action: `${action}:${entity}`,
     payload: {
       entity,

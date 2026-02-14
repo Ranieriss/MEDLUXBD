@@ -2,14 +2,28 @@ import { supabase } from '../supabaseClient.js';
 
 let orgInitialized = false;
 let currentUserId = null;
+let cachedOrgId = null;
+let cachedRole = null;
+
+function normalizeOrgId(profile) {
+  return profile?.org_id || profile?.organization_id || null;
+}
 
 export async function resetOrgContext() {
   orgInitialized = false;
   currentUserId = null;
+  cachedOrgId = null;
+  cachedRole = null;
+}
+
+export function getCachedOrgContext() {
+  return {
+    orgId: cachedOrgId,
+    role: cachedRole
+  };
 }
 
 export async function ensureOrgContext() {
-  // 1️⃣ Garantir que o usuário já está autenticado
   const {
     data: { user },
     error: userError
@@ -19,49 +33,44 @@ export async function ensureOrgContext() {
 
   if (!user) {
     resetOrgContext();
-    return { organizationId: null, role: null };
+    return { orgId: null, role: null };
   }
 
-  // Evita rodar duas vezes para o mesmo usuário
   if (orgInitialized && currentUserId === user.id) {
-    return;
+    return { orgId: cachedOrgId, role: cachedRole };
   }
 
   currentUserId = user.id;
 
-  // 2️⃣ Buscar profile
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('organization_id, role')
+    .select('org_id, organization_id, role')
     .eq('id', user.id)
     .single();
 
   if (profileError) throw profileError;
 
-  if (!profile?.organization_id) {
-    if (profile?.role === 'ADMIN') {
-      orgInitialized = true;
-      return;
-    }
+  const orgId = normalizeOrgId(profile);
+  const role = profile?.role || null;
 
-    throw new Error(
-      'Usuário não possui organization_id definido. Contate o administrador.'
-    );
+  if (!orgId && role !== 'ADMIN') {
+    console.error('[MEDLUXBD] org_id ausente em public.profiles para o usuário autenticado.', {
+      userId: user.id,
+      email: user.email || null
+    });
+
+    throw new Error('Usuário não possui org_id definido. Contate o administrador para configurar o profile.');
   }
 
-  // 3️⃣ IMPORTANTE: aguardar RPC finalizar
-  const { error: rpcError } = await supabase.rpc('set_current_org', {
-    org_id: profile.organization_id
-  });
-
-  if (rpcError) throw rpcError;
-
+  cachedOrgId = orgId;
+  cachedRole = role;
   orgInitialized = true;
 
-  console.log('✅ Contexto da organização definido:', profile.organization_id);
+  if (orgId) {
+    console.info('✅ Organização do usuário carregada via profile.org_id:', orgId);
+  } else {
+    console.info('✅ Usuário ADMIN sem org_id explícito detectado.');
+  }
 
-  return {
-    organizationId: profile.organization_id,
-    role: profile.role
-  };
+  return { orgId, role };
 }

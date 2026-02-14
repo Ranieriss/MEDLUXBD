@@ -1,6 +1,7 @@
 import { supabase, runQuery } from '../supabaseClient.js';
 import { MEDICAO_SELECT_COLUMNS } from './selectColumns.js';
 import { nowUtcIso } from '../shared_datetime.js';
+import { ensurePayloadOrgId } from './tenant.js';
 import { state } from '../state.js';
 
 const MEDICAO_LEGACY_COLUMNS =
@@ -34,15 +35,17 @@ export async function listMedicoes(filters = {}, { includeDeleted = false } = {}
   }
 }
 
-export const createMedicao = async (payload) =>
-  runQuery(
+export const createMedicao = async (payload) => {
+  const payloadWithOrg = await ensurePayloadOrgId(payload, 'medicoes.create');
+  return runQuery(
     supabase
       .from('medicoes')
-      .insert({ ...payload, created_at: payload.created_at || nowUtcIso() })
+      .insert({ ...payloadWithOrg, created_at: payloadWithOrg.created_at || nowUtcIso() })
       .select(MEDICAO_SELECT_COLUMNS)
       .single(),
     'medicoes.create'
   );
+};
 
 export const updateMedicao = async (id, payload) =>
   runQuery(

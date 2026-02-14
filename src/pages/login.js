@@ -73,6 +73,14 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function toOrgContextFriendlyMessage(error) {
+  const rawMessage = String(error?.message || '').toLowerCase();
+  if (rawMessage.includes('não está vinculado a uma organização') || rawMessage.includes('organization_id')) {
+    return 'Sua conta ainda não está vinculada a uma organização. Fale com o administrador para liberar seu acesso.';
+  }
+  return 'Não foi possível preparar seu acesso à organização agora. Tente novamente em instantes.';
+}
+
 export async function renderLogin(view) {
   view.innerHTML = `
     <div class="login-wrap">
@@ -153,7 +161,15 @@ export async function renderLogin(view) {
         return setErr(error);
       }
 
-      await ensureOrgContext(data.user);
+      try {
+        await ensureOrgContext(data.user);
+      } catch (orgError) {
+        logSupabaseAuthError(orgError, 'auth.login.orgContext');
+        addDiagnosticError(orgError, 'auth.login.orgContext');
+        await supabase.auth.signOut();
+        return setErr(toOrgContextFriendlyMessage(orgError));
+      }
+
       setState({ session: data.session, user: data.user });
       addEvent({ type: 'login', message: `Login realizado: ${email}` });
       navigate('/dashboard');

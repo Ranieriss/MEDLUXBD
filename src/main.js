@@ -15,6 +15,7 @@ import { APP_VERSION } from './version.js';
 import { createLogger } from './logger.js';
 import { handleGlobalError } from './errorHandling.js';
 import { ensureOrgContext, resetOrgContext } from './auth/orgContext.js';
+import { toast } from './ui.js';
 
 const appLogger = createLogger('app');
 const links = [
@@ -47,6 +48,18 @@ function renderShell() {
     addEvent({ type: 'logout', message: 'Logout realizado' });
     navigate('/login');
   };
+}
+
+function isMissingOrganizationError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('não está vinculado a uma organização') || message.includes('organization_id');
+}
+
+function notifyOrgContextError(error) {
+  const message = isMissingOrganizationError(error)
+    ? 'Seu usuário não está vinculado a uma organização. Faça login novamente após a configuração do seu acesso.'
+    : 'Não foi possível preparar o contexto da organização. Faça login novamente para tentar de novo.';
+  toast(message, 'error');
 }
 
 async function loadProfile() {
@@ -91,7 +104,18 @@ setGuard(async (hash) => {
   const isLogin = hash === '/login';
   const isRecovery = hash === '/update-password' || hash === '/reset-password';
   if (!state.session && !isLogin && !isRecovery) return '/login';
-  if (state.session && !isLogin && !isRecovery) await ensureOrgContext(state.user);
+  if (state.session && !isLogin && !isRecovery) {
+    try {
+      await ensureOrgContext(state.user);
+    } catch (error) {
+      addDiagnosticError(error, 'router.guard.ensureOrgContext');
+      notifyOrgContextError(error);
+      await supabase.auth.signOut();
+      resetOrgContext();
+      setState({ session: null, user: null, profile: null, role: 'USER' });
+      return '/login';
+    }
+  }
   if (state.session && isLogin) return '/dashboard';
   return null;
 });
@@ -128,9 +152,22 @@ window.addEventListener('unhandledrejection', (ev) => {
     assertSupabaseConfig();
 
     const { data } = await supabase.auth.getSession();
-    if (data.session?.user) await ensureOrgContext(data.session.user);
-    setState({ session: data.session, user: data.session?.user || null });
-    if (data.session?.user) await loadProfile();
+    let bootSession = data.session || null;
+
+    if (bootSession?.user) {
+      try {
+        await ensureOrgContext(bootSession.user);
+      } catch (error) {
+        addDiagnosticError(error, 'boot.ensureOrgContext');
+        notifyOrgContextError(error);
+        await supabase.auth.signOut();
+        resetOrgContext();
+        bootSession = null;
+      }
+    }
+
+    setState({ session: bootSession, user: bootSession?.user || null });
+    if (bootSession?.user) await loadProfile();
 
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -139,8 +176,28 @@ window.addEventListener('unhandledrejection', (ev) => {
         return;
       }
 
-      if (session?.user) await ensureOrgContext(session.user);
-      else resetOrgContext();
+      if (event === 'SIGNED_OUT') {
+        resetOrgContext();
+      }
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+        try {
+          await ensureOrgContext(session.user);
+        } catch (error) {
+          addDiagnosticError(error, `auth.onAuthStateChange.${event}.ensureOrgContext`);
+          notifyOrgContextError(error);
+          await supabase.auth.signOut();
+          resetOrgContext();
+          setState({ session: null, user: null, profile: null, role: 'USER' });
+          navigate('/login');
+          return;
+        }
+      }
+
+      if (!session?.user) {
+        resetOrgContext();
+      }
+
       setState({ session, user: session?.user || null });
       if (session?.user) await loadProfile();
       if (hasRecoveryParams()) cleanAuthParamsFromUrl(window.location.hash.replace('#', '') || '/dashboard');
